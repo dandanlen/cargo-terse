@@ -5,6 +5,7 @@ use std::time::Instant;
 
 use crate::cli::{OutputFormat, Verbosity};
 use crate::diagnostic::{Diagnostic, DiagnosticLevel, RunResult, RunSummary};
+use crate::fmt as fmt_mod;
 use crate::format;
 use crate::parser;
 
@@ -19,10 +20,27 @@ pub fn run_cargo(
     let is_fmt = cargo_cmd == "fmt";
     let is_test = cargo_cmd == "test";
 
+    // For fmt, determine whether to run --check or --fix mode.
+    // --fix: user explicitly passed --fix; we run plain `cargo fmt` (no --check).
+    // --check: user explicitly passed --check; honour it, don't add another one.
+    // default: add --check so we can parse the diff.
+    let fmt_fix = is_fmt
+        && cargo_args
+            .iter()
+            .any(|a| a == "--fix");
+    let fmt_has_check = is_fmt
+        && cargo_args
+            .iter()
+            .any(|a| a == "--check");
+    let fmt_check = is_fmt && !fmt_fix;
+
     let mut cmd = Command::new(&cargo_bin);
     cmd.arg(cargo_cmd);
     if !is_fmt {
         cmd.arg("--message-format=json");
+    }
+    if fmt_check && !fmt_has_check {
+        cmd.arg("--check");
     }
     cmd.args(cargo_args);
     cmd.stdout(Stdio::piped());
@@ -52,22 +70,26 @@ pub fn run_cargo(
     let mut next_error_id = 0usize;
     // For test commands, non-JSON stdout lines contain test runner output.
     let mut test_stdout_lines: Vec<String> = Vec::new();
+    // For fmt --check, collect stdout (the diff output).
+    let mut fmt_stdout = String::new();
 
-    if !is_fmt {
+    if is_fmt {
         if let Some(stdout) = child.stdout.take() {
-            for line in BufReader::new(stdout).lines() {
-                let line = match line {
-                    Ok(l) => l,
-                    Err(_) => break,
-                };
-                if let Some(diag) =
-                    parser::parse_cargo_json_line(&line, &mut next_warning_id, &mut next_error_id)
-                {
-                    println!("{}", formatter.format_diagnostic(&diag));
-                    diagnostics.push(diag);
-                } else if is_test {
-                    test_stdout_lines.push(line);
-                }
+            BufReader::new(stdout).read_to_string(&mut fmt_stdout).ok();
+        }
+    } else if let Some(stdout) = child.stdout.take() {
+        for line in BufReader::new(stdout).lines() {
+            let line = match line {
+                Ok(l) => l,
+                Err(_) => break,
+            };
+            if let Some(diag) =
+                parser::parse_cargo_json_line(&line, &mut next_warning_id, &mut next_error_id)
+            {
+                println!("{}", formatter.format_diagnostic(&diag));
+                diagnostics.push(diag);
+            } else if is_test {
+                test_stdout_lines.push(line);
             }
         }
     }
@@ -81,8 +103,21 @@ pub fn run_cargo(
     };
 
     let stderr_output = stderr_handle.map(|h| h.join().unwrap()).unwrap_or_default();
+    let _ = stderr_output; // available for future use
 
     let elapsed_secs = started.elapsed().as_secs_f64();
+
+    // Handle fmt output separately.
+    if is_fmt {
+        return run_fmt_output(
+            fmt_fix,
+            &fmt_stdout,
+            exit_code,
+            elapsed_secs,
+            verbosity,
+            formatter.as_ref(),
+        );
+    }
 
     let errors = diagnostics
         .iter()
@@ -128,6 +163,70 @@ pub fn run_cargo(
     if !no_cache {
         crate::cache::write_cache(&result);
     }
+
+    exit_code
+}
+
+/// Print fmt results and return the exit code.
+fn run_fmt_output(
+    is_fix: bool,
+    stdout: &str,
+    exit_code: i32,
+    elapsed_secs: f64,
+    verbosity: &Verbosity,
+    formatter: &dyn format::Formatter,
+) -> i32 {
+    let elapsed = format!("{:.1}s", elapsed_secs);
+
+    if is_fix {
+        // `cargo fmt` (fix mode): just report ok.
+        println!("ok (fmt) {elapsed}");
+        return exit_code;
+    }
+
+    // --check mode: parse the diff.
+    let fmt_result = fmt_mod::parse_fmt_output(stdout);
+
+    if fmt_result.files.is_empty() {
+        println!("ok (fmt) {elapsed}");
+        return exit_code;
+    }
+
+    // Print a line per file, then a summary.
+    for (i, file) in fmt_result.files.iter().enumerate() {
+        let id = i + 1;
+        println!("F{id} unformatted {file}");
+
+        match verbosity {
+            Verbosity::Verbose => {
+                let diff = fmt_mod::format_file_diff(&fmt_result.full_diff, file, true);
+                if !diff.is_empty() {
+                    for line in diff.lines() {
+                        println!("   {line}");
+                    }
+                }
+            }
+            Verbosity::VeryVerbose => {
+                let diff = fmt_mod::format_file_diff(&fmt_result.full_diff, file, false);
+                if !diff.is_empty() {
+                    for line in diff.lines() {
+                        println!("   {line}");
+                    }
+                }
+            }
+            Verbosity::Terse => {}
+        }
+    }
+
+    let n = fmt_result.files.len();
+    println!(
+        "{n} {} formatting {elapsed}",
+        if n == 1 { "file needs" } else { "files need" }
+    );
+
+    // Suppress unused warning on formatter for fmt path (the trait object is
+    // created before we know it's fmt; in future other formatters could use it).
+    let _ = formatter;
 
     exit_code
 }

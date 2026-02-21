@@ -1,6 +1,7 @@
 mod cache;
 mod cli;
 mod diagnostic;
+mod fmt;
 mod format;
 mod parser;
 mod runner;
