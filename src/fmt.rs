@@ -10,33 +10,47 @@ pub struct FmtResult {
 /// Lines until the next such header (or EOF) belong to that file's hunk.
 pub fn parse_fmt_output(stdout: &str) -> FmtResult {
     if stdout.is_empty() {
-        return FmtResult { files: vec![], full_diff: String::new() };
+        return FmtResult {
+            files: vec![],
+            full_diff: String::new(),
+        };
     }
+
+    let cwd = std::env::current_dir()
+        .map(|p| {
+            let mut s = p.to_string_lossy().into_owned();
+            if !s.ends_with('/') {
+                s.push('/');
+            }
+            s
+        })
+        .unwrap_or_default();
 
     let mut files: Vec<String> = Vec::new();
 
     for line in stdout.lines() {
         if let Some(rest) = line.strip_prefix("Diff in ") {
-            // "Diff in /path/to/file.rs:42:"
-            // Strip trailing colon then split off the line number suffix.
             let trimmed = rest.trim_end_matches(':');
-            // Path is everything up to the last ':' (the line number).
             if let Some(colon_pos) = trimmed.rfind(':') {
-                let path = trimmed[..colon_pos].trim().to_string();
-                if !files.contains(&path) {
-                    files.push(path);
+                let path = trimmed[..colon_pos].trim();
+                let rel = path.strip_prefix(cwd.as_str()).unwrap_or(path).to_string();
+                if !files.contains(&rel) {
+                    files.push(rel);
                 }
             } else {
-                // No line number — treat the whole thing as the path.
-                let path = trimmed.trim().to_string();
-                if !files.contains(&path) {
-                    files.push(path);
+                let path = trimmed.trim();
+                let rel = path.strip_prefix(cwd.as_str()).unwrap_or(path).to_string();
+                if !files.contains(&rel) {
+                    files.push(rel);
                 }
             }
         }
     }
 
-    FmtResult { files, full_diff: stdout.to_string() }
+    FmtResult {
+        files,
+        full_diff: stdout.to_string(),
+    }
 }
 
 /// Returns only the diff lines belonging to `file` (the hunk text, without the header).

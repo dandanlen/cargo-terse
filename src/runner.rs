@@ -24,14 +24,8 @@ pub fn run_cargo(
     // --fix: user explicitly passed --fix; we run plain `cargo fmt` (no --check).
     // --check: user explicitly passed --check; honour it, don't add another one.
     // default: add --check so we can parse the diff.
-    let fmt_fix = is_fmt
-        && cargo_args
-            .iter()
-            .any(|a| a == "--fix");
-    let fmt_has_check = is_fmt
-        && cargo_args
-            .iter()
-            .any(|a| a == "--check");
+    let fmt_fix = is_fmt && cargo_args.iter().any(|a| a == "--fix");
+    let fmt_has_check = is_fmt && cargo_args.iter().any(|a| a == "--check");
     let fmt_check = is_fmt && !fmt_fix;
 
     let mut cmd = Command::new(&cargo_bin);
@@ -230,4 +224,3 @@ fn run_fmt_output(
 
     exit_code
 }
-

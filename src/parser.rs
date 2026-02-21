@@ -62,12 +62,18 @@ pub struct TestSummary {
 /// `---- <name> stdout ----`. Panic location and message are parsed from the block body.
 pub fn parse_test_stderr(stderr: &str) -> (Vec<TestResult>, TestSummary) {
     // Find the summary line; if absent (e.g. compilation failed before tests ran), bail early.
-    let summary_line = match stderr
-        .lines()
-        .find(|l| l.starts_with("test result:"))
-    {
+    let summary_line = match stderr.lines().find(|l| l.starts_with("test result:")) {
         Some(l) => l,
-        None => return (vec![], TestSummary { passed: 0, failed: 0, ignored: 0 }),
+        None => {
+            return (
+                vec![],
+                TestSummary {
+                    passed: 0,
+                    failed: 0,
+                    ignored: 0,
+                },
+            )
+        }
     };
 
     let summary = parse_summary_line(summary_line);
@@ -105,7 +111,11 @@ fn parse_summary_line(line: &str) -> TestSummary {
             }
         }
     }
-    TestSummary { passed, failed, ignored }
+    TestSummary {
+        passed,
+        failed,
+        ignored,
+    }
 }
 
 fn parse_failure_blocks(stderr: &str) -> Vec<TestResult> {
@@ -126,7 +136,10 @@ fn parse_failure_blocks(stderr: &str) -> Vec<TestResult> {
 
     // Each failure block starts with `---- <name> stdout ----`
     for block in detail_section.split("\n---- ") {
-        let block = block.trim_start_matches("---- ").trim_start_matches('-').trim_start();
+        let block = block
+            .trim_start_matches("---- ")
+            .trim_start_matches('-')
+            .trim_start();
         // After splitting on "\n---- ", the first chunk before any `----` is just whitespace.
         let header_end = match block.find(" stdout ----") {
             Some(i) => i,
@@ -300,7 +313,11 @@ mod tests {
         assert_eq!(f1.name, "tests::parse_config_missing_field");
         assert_eq!(f1.file.as_deref(), Some("src/config.rs"));
         assert_eq!(f1.line, Some(156));
-        assert!(f1.failure_message.as_deref().unwrap_or("").contains("left == right"));
+        assert!(f1
+            .failure_message
+            .as_deref()
+            .unwrap_or("")
+            .contains("left == right"));
         assert!(!f1.passed);
     }
 

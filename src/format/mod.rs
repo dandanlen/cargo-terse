@@ -17,7 +17,9 @@ pub trait Formatter {
 
 pub fn create_formatter(format: &OutputFormat, verbosity: &Verbosity) -> Box<dyn Formatter> {
     match format {
-        OutputFormat::Plain => Box::new(PlainFormatter { verbosity: verbosity.clone() }),
+        OutputFormat::Plain => Box::new(PlainFormatter {
+            verbosity: verbosity.clone(),
+        }),
         OutputFormat::Json => Box::new(JsonFormatter),
         OutputFormat::Toon => Box::new(ToonFormatter),
     }

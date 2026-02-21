@@ -7,12 +7,16 @@ impl ToonFormatter {
     fn diagnostic_to_json(diag: &Diagnostic) -> serde_json::Value {
         let mut obj = serde_json::Map::new();
         obj.insert("id".into(), diag.id.clone().into());
-        obj.insert("level".into(), match diag.level {
-            DiagnosticLevel::Error => "error",
-            DiagnosticLevel::Warning => "warning",
-            DiagnosticLevel::Note => "note",
-            DiagnosticLevel::Help => "help",
-        }.into());
+        obj.insert(
+            "level".into(),
+            match diag.level {
+                DiagnosticLevel::Error => "error",
+                DiagnosticLevel::Warning => "warning",
+                DiagnosticLevel::Note => "note",
+                DiagnosticLevel::Help => "help",
+            }
+            .into(),
+        );
         obj.insert("code".into(), diag.code.clone().unwrap_or_default().into());
         obj.insert("file".into(), diag.file.clone().unwrap_or_default().into());
         obj.insert("line".into(), diag.line.unwrap_or(0).into());
@@ -23,7 +27,8 @@ impl ToonFormatter {
 
     /// Format a batch of diagnostics as a TOON-encoded array (tabular).
     pub fn format_diagnostics_table(diagnostics: &[Diagnostic]) -> String {
-        let arr: Vec<serde_json::Value> = diagnostics.iter().map(Self::diagnostic_to_json).collect();
+        let arr: Vec<serde_json::Value> =
+            diagnostics.iter().map(Self::diagnostic_to_json).collect();
         let wrapper = serde_json::json!({ "diagnostics": arr });
         toon_format::encode_default(&wrapper).unwrap_or_else(|_| "encoding error".into())
     }
@@ -57,10 +62,18 @@ impl Formatter for ToonFormatter {
         let mut obj = serde_json::Map::new();
         obj.insert("summary".into(), true.into());
         obj.insert("command".into(), summary.command.clone().into());
-        obj.insert("status".into(), if summary.success { "ok" } else { "fail" }.into());
+        obj.insert(
+            "status".into(),
+            if summary.success { "ok" } else { "fail" }.into(),
+        );
         obj.insert("warnings".into(), summary.warnings.into());
         obj.insert("errors".into(), summary.errors.into());
-        obj.insert("elapsed_secs".into(), serde_json::Number::from_f64(summary.elapsed_secs).unwrap().into());
+        obj.insert(
+            "elapsed_secs".into(),
+            serde_json::Number::from_f64(summary.elapsed_secs)
+                .unwrap()
+                .into(),
+        );
         toon_format::encode_default(&serde_json::Value::Object(obj))
             .unwrap_or_else(|_| "encoding error".into())
     }

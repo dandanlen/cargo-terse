@@ -7,12 +7,16 @@ impl Formatter for JsonFormatter {
     fn format_diagnostic(&self, diag: &Diagnostic) -> String {
         let mut obj = serde_json::Map::new();
         obj.insert("id".into(), diag.id.clone().into());
-        obj.insert("level".into(), match diag.level {
-            DiagnosticLevel::Error => "error",
-            DiagnosticLevel::Warning => "warning",
-            DiagnosticLevel::Note => "note",
-            DiagnosticLevel::Help => "help",
-        }.into());
+        obj.insert(
+            "level".into(),
+            match diag.level {
+                DiagnosticLevel::Error => "error",
+                DiagnosticLevel::Warning => "warning",
+                DiagnosticLevel::Note => "note",
+                DiagnosticLevel::Help => "help",
+            }
+            .into(),
+        );
         if let Some(code) = &diag.code {
             obj.insert("code".into(), code.clone().into());
         }
@@ -50,14 +54,22 @@ impl Formatter for JsonFormatter {
         let mut obj = serde_json::Map::new();
         obj.insert("summary".into(), true.into());
         obj.insert("command".into(), summary.command.clone().into());
-        obj.insert("status".into(), if summary.success { "ok" } else { "fail" }.into());
+        obj.insert(
+            "status".into(),
+            if summary.success { "ok" } else { "fail" }.into(),
+        );
         obj.insert("warnings".into(), summary.warnings.into());
         obj.insert("errors".into(), summary.errors.into());
         if summary.command == "test" {
             obj.insert("tests_passed".into(), summary.tests_passed.into());
             obj.insert("tests_failed".into(), summary.tests_failed.into());
         }
-        obj.insert("elapsed_secs".into(), serde_json::Number::from_f64(summary.elapsed_secs).unwrap().into());
+        obj.insert(
+            "elapsed_secs".into(),
+            serde_json::Number::from_f64(summary.elapsed_secs)
+                .unwrap()
+                .into(),
+        );
         serde_json::to_string(&obj).unwrap()
     }
 }

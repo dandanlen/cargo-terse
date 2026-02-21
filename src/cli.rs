@@ -70,9 +70,11 @@ pub fn parse_args(args: Vec<OsString>) -> Result<Command, lexopt::Error> {
                                         Some("plain") => OutputFormat::Plain,
                                         Some("json") => OutputFormat::Json,
                                         Some("toon") => OutputFormat::Toon,
-                                        _ => return Err(lexopt::Error::Custom(
-                                            "invalid --format value".into(),
-                                        )),
+                                        _ => {
+                                            return Err(lexopt::Error::Custom(
+                                                "invalid --format value".into(),
+                                            ))
+                                        }
                                     };
                                 }
                                 other => return Err(other.unexpected()),
@@ -126,9 +128,13 @@ mod tests {
     // Helper to unwrap a Run command
     fn run(cmd: Command) -> (String, OutputFormat, Verbosity, bool, Vec<OsString>) {
         match cmd {
-            Command::Run { cargo_cmd, format, verbosity, no_cache, cargo_args } => {
-                (cargo_cmd, format, verbosity, no_cache, cargo_args)
-            }
+            Command::Run {
+                cargo_cmd,
+                format,
+                verbosity,
+                no_cache,
+                cargo_args,
+            } => (cargo_cmd, format, verbosity, no_cache, cargo_args),
             _ => panic!("expected Run command"),
         }
     }
@@ -149,13 +155,17 @@ mod tests {
     #[test]
     fn clippy_json_verbose_with_passthrough() {
         let cmd = parse_args(args(&[
-            "cargo-terse", "terse",
-            "--format", "json",
+            "cargo-terse",
+            "terse",
+            "--format",
+            "json",
             "-v",
             "clippy",
             "--",
-            "-W", "clippy::all",
-        ])).unwrap();
+            "-W",
+            "clippy::all",
+        ]))
+        .unwrap();
         let (cargo_cmd, format, verbosity, _, cargo_args) = run(cmd);
         assert_eq!(cargo_cmd, "clippy");
         assert_eq!(format, OutputFormat::Json);
@@ -207,9 +217,13 @@ mod tests {
     #[test]
     fn double_dash_passthrough() {
         let cmd = parse_args(args(&[
-            "cargo-terse", "terse",
-            "test", "--", "--test-threads=1",
-        ])).unwrap();
+            "cargo-terse",
+            "terse",
+            "test",
+            "--",
+            "--test-threads=1",
+        ]))
+        .unwrap();
         let (cargo_cmd, _, _, _, cargo_args) = run(cmd);
         assert_eq!(cargo_cmd, "test");
         assert_eq!(cargo_args, args(&["--", "--test-threads=1"]));

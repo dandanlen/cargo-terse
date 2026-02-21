@@ -90,10 +90,7 @@ impl Formatter for PlainFormatter {
                 } else {
                     format!(
                         "test result: FAILED. {} passed; {} failed; {} ignored {}",
-                        summary.tests_passed,
-                        summary.tests_failed,
-                        summary.tests_ignored,
-                        elapsed
+                        summary.tests_passed, summary.tests_failed, summary.tests_ignored, elapsed
                     )
                 }
             }
@@ -110,9 +107,17 @@ impl Formatter for PlainFormatter {
                     format!(
                         "{} {}, {} {} {elapsed}",
                         summary.warnings,
-                        if summary.warnings == 1 { "warning" } else { "warnings" },
+                        if summary.warnings == 1 {
+                            "warning"
+                        } else {
+                            "warnings"
+                        },
                         summary.errors,
-                        if summary.errors == 1 { "error" } else { "errors" }
+                        if summary.errors == 1 {
+                            "error"
+                        } else {
+                            "errors"
+                        }
                     )
                 }
             }
@@ -140,7 +145,13 @@ mod tests {
         }
     }
 
-    fn summary(cmd: &str, success: bool, warnings: usize, errors: usize, elapsed: f64) -> RunSummary {
+    fn summary(
+        cmd: &str,
+        success: bool,
+        warnings: usize,
+        errors: usize,
+        elapsed: f64,
+    ) -> RunSummary {
         RunSummary {
             command: cmd.to_string(),
             success,
@@ -156,8 +167,15 @@ mod tests {
     // 1. Terse diagnostic with code and location → one-line format
     #[test]
     fn terse_diagnostic() {
-        let fmt = PlainFormatter { verbosity: Verbosity::Terse };
-        let d = diag("W1", DiagnosticLevel::Warning, Some("clippy::needless_return"), "unnecessary `return`");
+        let fmt = PlainFormatter {
+            verbosity: Verbosity::Terse,
+        };
+        let d = diag(
+            "W1",
+            DiagnosticLevel::Warning,
+            Some("clippy::needless_return"),
+            "unnecessary `return`",
+        );
         assert_eq!(
             fmt.format_diagnostic(&d),
             "W1 warning[clippy::needless_return] src/main.rs:42:5 unnecessary `return`"
@@ -167,7 +185,9 @@ mod tests {
     // 2. Terse diagnostic without code → no brackets
     #[test]
     fn terse_diagnostic_no_code() {
-        let fmt = PlainFormatter { verbosity: Verbosity::Terse };
+        let fmt = PlainFormatter {
+            verbosity: Verbosity::Terse,
+        };
         let d = diag("W1", DiagnosticLevel::Warning, None, "unused variable");
         assert_eq!(
             fmt.format_diagnostic(&d),
@@ -178,8 +198,15 @@ mod tests {
     // 3. Verbose diagnostic includes span_text and span_label
     #[test]
     fn verbose_diagnostic_includes_span() {
-        let fmt = PlainFormatter { verbosity: Verbosity::Verbose };
-        let mut d = diag("W1", DiagnosticLevel::Warning, Some("clippy::needless_return"), "unnecessary `return`");
+        let fmt = PlainFormatter {
+            verbosity: Verbosity::Verbose,
+        };
+        let mut d = diag(
+            "W1",
+            DiagnosticLevel::Warning,
+            Some("clippy::needless_return"),
+            "unnecessary `return`",
+        );
         d.span_text = Some("return Ok(value);".to_string());
         d.span_label = Some("^^^^^^^^^^^^^^^^^ help: remove `return`: `Ok(value)`".to_string());
         let out = fmt.format_diagnostic(&d);
@@ -192,8 +219,15 @@ mod tests {
     // 4. VeryVerbose passes through rendered field
     #[test]
     fn very_verbose_uses_rendered() {
-        let fmt = PlainFormatter { verbosity: Verbosity::VeryVerbose };
-        let mut d = diag("W1", DiagnosticLevel::Warning, Some("clippy::needless_return"), "unnecessary `return`");
+        let fmt = PlainFormatter {
+            verbosity: Verbosity::VeryVerbose,
+        };
+        let mut d = diag(
+            "W1",
+            DiagnosticLevel::Warning,
+            Some("clippy::needless_return"),
+            "unnecessary `return`",
+        );
         d.rendered = Some("full rendered output here".to_string());
         assert_eq!(fmt.format_diagnostic(&d), "full rendered output here");
     }
@@ -201,7 +235,9 @@ mod tests {
     // 5. Success summary for clippy → "ok (clippy) 0 warnings 4.2s"
     #[test]
     fn success_summary_clippy() {
-        let fmt = PlainFormatter { verbosity: Verbosity::Terse };
+        let fmt = PlainFormatter {
+            verbosity: Verbosity::Terse,
+        };
         let s = summary("clippy", true, 0, 0, 4.2);
         assert_eq!(fmt.format_summary(&s), "ok (clippy) 0 warnings 4.2s");
     }
@@ -209,7 +245,9 @@ mod tests {
     // 6. Failure summary with counts → "2 warnings, 1 error 4.2s"
     #[test]
     fn failure_summary_with_counts() {
-        let fmt = PlainFormatter { verbosity: Verbosity::Terse };
+        let fmt = PlainFormatter {
+            verbosity: Verbosity::Terse,
+        };
         let s = summary("clippy", false, 2, 1, 4.2);
         assert_eq!(fmt.format_summary(&s), "2 warnings, 1 error 4.2s");
     }
@@ -217,7 +255,9 @@ mod tests {
     // 7. Test success summary → "ok (test) 47 passed, 0 failed 8.1s"
     #[test]
     fn test_success_summary() {
-        let fmt = PlainFormatter { verbosity: Verbosity::Terse };
+        let fmt = PlainFormatter {
+            verbosity: Verbosity::Terse,
+        };
         let s = RunSummary {
             command: "test".to_string(),
             success: true,
@@ -234,7 +274,9 @@ mod tests {
     // 8. Test failure terse → "F1 FAILED tests::parse_config"
     #[test]
     fn test_failure_terse() {
-        let fmt = PlainFormatter { verbosity: Verbosity::Terse };
+        let fmt = PlainFormatter {
+            verbosity: Verbosity::Terse,
+        };
         let r = TestResult {
             id: "F1".to_string(),
             name: "tests::parse_config".to_string(),
@@ -249,7 +291,9 @@ mod tests {
     // 9. Test failure verbose → includes failure message and location
     #[test]
     fn test_failure_verbose() {
-        let fmt = PlainFormatter { verbosity: Verbosity::Verbose };
+        let fmt = PlainFormatter {
+            verbosity: Verbosity::Verbose,
+        };
         let r = TestResult {
             id: "F1".to_string(),
             name: "tests::parse_config".to_string(),
