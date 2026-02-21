@@ -20,11 +20,17 @@ fn check_outputs_terse_warning() {
         .unwrap();
     let stdout = String::from_utf8(output.stdout).unwrap();
     // Should contain a terse warning line with W1
-    assert!(stdout.contains("W1 warning"), "expected W1 warning in: {stdout}");
+    assert!(
+        stdout.contains("W1 warning"),
+        "expected W1 warning in: {stdout}"
+    );
     // Should contain "unused" somewhere
     assert!(stdout.contains("unused"), "expected 'unused' in: {stdout}");
     // Should NOT contain "Compiling" (that goes to stderr in the child)
-    assert!(!stdout.contains("Compiling"), "should not contain Compiling progress");
+    assert!(
+        !stdout.contains("Compiling"),
+        "should not contain Compiling progress"
+    );
 }
 
 #[test]
@@ -35,8 +41,14 @@ fn check_outputs_summary() {
         .output()
         .unwrap();
     let stdout = String::from_utf8(output.stdout).unwrap();
-    assert!(stdout.contains("warning"), "expected warning summary in: {stdout}");
-    assert!(stdout.contains("ok (check)"), "expected ok summary in: {stdout}");
+    assert!(
+        stdout.contains("warning"),
+        "expected warning summary in: {stdout}"
+    );
+    assert!(
+        stdout.contains("ok (check)"),
+        "expected ok summary in: {stdout}"
+    );
 }
 
 #[test]
@@ -79,7 +91,10 @@ fn exit_code_mirrors_cargo() {
         .current_dir(FIXTURE)
         .output()
         .unwrap();
-    assert!(output.status.success(), "check with only warnings should exit 0");
+    assert!(
+        output.status.success(),
+        "check with only warnings should exit 0"
+    );
 }
 
 #[test]
@@ -114,5 +129,8 @@ fn verbose_check_includes_span() {
         .unwrap();
     let stdout = String::from_utf8(output.stdout).unwrap();
     // Verbose should include the span text (the actual code line)
-    assert!(stdout.contains("|"), "verbose should include span with | prefix: {stdout}");
+    assert!(
+        stdout.contains("|"),
+        "verbose should include span with | prefix: {stdout}"
+    );
 }

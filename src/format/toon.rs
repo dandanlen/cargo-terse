@@ -24,14 +24,6 @@ impl ToonFormatter {
         obj.insert("message".into(), diag.message.clone().into());
         serde_json::Value::Object(obj)
     }
-
-    /// Format a batch of diagnostics as a TOON-encoded array (tabular).
-    pub fn format_diagnostics_table(diagnostics: &[Diagnostic]) -> String {
-        let arr: Vec<serde_json::Value> =
-            diagnostics.iter().map(Self::diagnostic_to_json).collect();
-        let wrapper = serde_json::json!({ "diagnostics": arr });
-        toon_format::encode_default(&wrapper).unwrap_or_else(|_| "encoding error".into())
-    }
 }
 
 impl Formatter for ToonFormatter {
@@ -54,7 +46,7 @@ impl Formatter for ToonFormatter {
         if let Some(line) = result.line {
             obj.insert("line".into(), line.into());
         }
-        toon_format::encode_default(&serde_json::Value::Object(obj))
+        toon_format::encode_default(serde_json::Value::Object(obj))
             .unwrap_or_else(|_| "encoding error".into())
     }
 
@@ -74,7 +66,7 @@ impl Formatter for ToonFormatter {
                 .unwrap()
                 .into(),
         );
-        toon_format::encode_default(&serde_json::Value::Object(obj))
+        toon_format::encode_default(serde_json::Value::Object(obj))
             .unwrap_or_else(|_| "encoding error".into())
     }
 }
@@ -99,22 +91,6 @@ mod tests {
         }
     }
 
-    fn sample_error() -> Diagnostic {
-        Diagnostic {
-            id: "E1".into(),
-            level: DiagnosticLevel::Error,
-            code: Some("E0308".into()),
-            message: "expected `u32`, found `&str`".into(),
-            file: Some("src/handler.rs".into()),
-            line: Some(93),
-            col: Some(12),
-            span_text: None,
-            span_label: None,
-            rendered: None,
-            raw_json: None,
-        }
-    }
-
     #[test]
     fn toon_single_diagnostic_encodes() {
         let out = ToonFormatter.format_diagnostic(&sample_warning());
@@ -122,18 +98,6 @@ mod tests {
         assert!(out.contains("id: W1"));
         assert!(out.contains("level: warning"));
         assert!(out.contains("clippy::needless_return"));
-    }
-
-    #[test]
-    fn toon_table_encodes_array() {
-        let diags = vec![sample_warning(), sample_error()];
-        let out = ToonFormatter::format_diagnostics_table(&diags);
-        // TOON tabular format for uniform arrays
-        assert!(out.contains("diagnostics"));
-        assert!(out.contains("W1"));
-        assert!(out.contains("E1"));
-        assert!(out.contains("warning"));
-        assert!(out.contains("error"));
     }
 
     #[test]
