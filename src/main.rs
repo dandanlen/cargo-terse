@@ -1,4 +1,5 @@
 mod cli;
+mod diagnostic;
 
 fn main() {
     let args: Vec<std::ffi::OsString> = std::env::args_os().collect();
