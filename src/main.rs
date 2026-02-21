@@ -1,5 +1,6 @@
 mod cli;
 mod diagnostic;
+mod parser;
 
 fn main() {
     let args: Vec<std::ffi::OsString> = std::env::args_os().collect();
