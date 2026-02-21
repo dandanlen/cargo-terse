@@ -120,12 +120,9 @@ pub fn run_cargo(
     };
 
     if !no_cache {
-        write_cache(&result);
+        crate::cache::write_cache(&result);
     }
 
     exit_code
 }
 
-fn write_cache(_result: &RunResult) {
-    // TODO: implement in Task 10
-}
