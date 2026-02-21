@@ -2,6 +2,7 @@ mod cli;
 mod diagnostic;
 mod format;
 mod parser;
+mod runner;
 
 fn main() {
     let args: Vec<std::ffi::OsString> = std::env::args_os().collect();
