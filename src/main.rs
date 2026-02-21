@@ -6,6 +6,31 @@ mod format;
 mod parser;
 mod runner;
 
+fn print_help() {
+    println!(
+        "cargo-terse — concise cargo output for AI-assisted workflows
+
+USAGE:
+    cargo terse [OPTIONS] [COMMAND] [-- <CARGO_ARGS>...]
+
+COMMANDS:
+    check       Run cargo check (default)
+    build       Run cargo build
+    test        Run cargo test
+    clippy      Run cargo clippy
+    fmt         Run cargo fmt --check
+    detail <ID> Show full diagnostic for cached ID
+
+OPTIONS:
+    --format <plain|json|toon>  Output format (default: plain)
+    -v                          Verbose: include code span
+    -vv                         Very verbose: full rustc output
+    --no-cache                  Disable drill-down cache
+    --version                   Print version
+    -h, --help                  Print this help"
+    );
+}
+
 fn main() {
     let args: Vec<std::ffi::OsString> = std::env::args_os().collect();
 
@@ -45,6 +70,7 @@ fn main() {
                     std::process::exit(1);
                 }
             },
+            cli::Command::Help => print_help(),
         },
         Err(e) => {
             eprintln!("cargo-terse: {e}");

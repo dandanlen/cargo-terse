@@ -27,6 +27,7 @@ pub enum Command {
         id: String,
         format: OutputFormat,
     },
+    Help,
 }
 
 pub fn parse_args(args: Vec<OsString>) -> Result<Command, lexopt::Error> {
@@ -56,9 +57,15 @@ pub fn parse_args(args: Vec<OsString>) -> Result<Command, lexopt::Error> {
             lexopt::Arg::Long("no-cache") => {
                 no_cache = true;
             }
+            lexopt::Arg::Long("help") | lexopt::Arg::Short('h') => {
+                return Ok(Command::Help);
+            }
             lexopt::Arg::Value(val) => {
                 let s = val.to_str().unwrap_or("").to_string();
                 if cargo_cmd.is_none() {
+                    if s == "help" {
+                        return Ok(Command::Help);
+                    }
                     if s == "detail" {
                         // detail <ID> [--format plain|json]
                         let id = parser.value()?.to_str().unwrap_or("").to_string();
@@ -227,5 +234,12 @@ mod tests {
         let (cargo_cmd, _, _, _, cargo_args) = run(cmd);
         assert_eq!(cargo_cmd, "test");
         assert_eq!(cargo_args, args(&["--", "--test-threads=1"]));
+    }
+
+    // 8. help subcommand
+    #[test]
+    fn help_subcommand() {
+        let cmd = parse_args(args(&["cargo-terse", "terse", "help"])).unwrap();
+        assert!(matches!(cmd, Command::Help));
     }
 }
