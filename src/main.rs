@@ -1,5 +1,6 @@
 mod cli;
 mod diagnostic;
+mod format;
 mod parser;
 
 fn main() {
