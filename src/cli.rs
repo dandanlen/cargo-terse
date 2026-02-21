@@ -7,7 +7,7 @@ pub enum OutputFormat {
     Toon,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Verbosity {
     Terse,
     Verbose,
