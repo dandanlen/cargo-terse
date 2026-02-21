@@ -6,8 +6,21 @@ Concise cargo output for AI-assisted Rust development.
 
 ## Install
 
+### From crates.io
 ```bash
 cargo install cargo-terse
+```
+
+### Pre-built binaries (via cargo-binstall)
+```bash
+cargo binstall cargo-terse
+```
+
+### From source
+```bash
+git clone https://github.com/daabt-labs/cargo-terse.git
+cd cargo-terse
+cargo install --path .
 ```
 
 ## Usage
@@ -43,6 +56,20 @@ Each diagnostic gets an ID. Use `detail` to expand it:
 ```bash
 cargo terse check          # shows: W1 warning[unused_variables] src/lib.rs:4:9 ...
 cargo terse detail W1      # shows full rendered diagnostic for W1
+```
+
+## Configuration for AI agents
+
+Add to your project's `CLAUDE.md` (or equivalent AI agent instructions):
+
+```
+Use `cargo terse` instead of `cargo` for build, check, test, clippy, and fmt commands.
+Examples:
+- `cargo terse check` instead of `cargo check`
+- `cargo terse test` instead of `cargo test`
+- `cargo terse clippy` instead of `cargo clippy`
+
+When a diagnostic needs more context, use `cargo terse detail <ID>` to expand it.
 ```
 
 ## Example output
