@@ -50,6 +50,8 @@ pub fn run_cargo(
     let mut diagnostics: Vec<Diagnostic> = Vec::new();
     let mut next_warning_id = 0usize;
     let mut next_error_id = 0usize;
+    // For test commands, non-JSON stdout lines contain test runner output.
+    let mut test_stdout_lines: Vec<String> = Vec::new();
 
     if !is_fmt {
         if let Some(stdout) = child.stdout.take() {
@@ -61,8 +63,10 @@ pub fn run_cargo(
                 if let Some(diag) =
                     parser::parse_cargo_json_line(&line, &mut next_warning_id, &mut next_error_id)
                 {
-                    print!("{}", formatter.format_diagnostic(&diag));
+                    println!("{}", formatter.format_diagnostic(&diag));
                     diagnostics.push(diag);
+                } else if is_test {
+                    test_stdout_lines.push(line);
                 }
             }
         }
@@ -90,12 +94,14 @@ pub fn run_cargo(
         .count();
 
     let (test_results, tests_passed, tests_failed, tests_ignored) = if is_test {
-        let (results, summary) = parser::parse_test_stderr(&stderr_output);
+        // Test runner output goes to stdout (interleaved with JSON). Non-JSON lines were
+        // collected in test_stdout_lines. Parse them the same way we parse stderr text.
+        let test_output = test_stdout_lines.join("\n");
+        let (results, summary) = parser::parse_test_stderr(&test_output);
         for result in &results {
-            print!("{}", formatter.format_test_failure(result));
+            println!("{}", formatter.format_test_failure(result));
         }
-        let (passed, failed, ignored) = (summary.passed, summary.failed, summary.ignored);
-        (results, passed, failed, ignored)
+        (results, summary.passed, summary.failed, summary.ignored)
     } else {
         (vec![], 0, 0, 0)
     };
@@ -111,7 +117,7 @@ pub fn run_cargo(
         elapsed_secs,
     };
 
-    print!("{}", formatter.format_summary(&summary));
+    println!("{}", formatter.format_summary(&summary));
 
     let result = RunResult {
         diagnostics,
