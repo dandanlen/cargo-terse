@@ -1,4 +1,4 @@
-use crate::diagnostic::{Diagnostic, DiagnosticLevel};
+use crate::diagnostic::{Diagnostic, DiagnosticLevel, TestResult};
 
 pub fn parse_cargo_json_line(
     line: &str,
@@ -48,6 +48,145 @@ pub fn parse_cargo_json_line(
         rendered: msg["rendered"].as_str().map(str::to_owned),
         raw_json: Some(v),
     })
+}
+
+pub struct TestSummary {
+    pub passed: usize,
+    pub failed: usize,
+    pub ignored: usize,
+}
+
+/// Parses libtest stderr output, returning only failed tests and the summary counts.
+///
+/// Failures are extracted from the `failures:` block where each entry starts with
+/// `---- <name> stdout ----`. Panic location and message are parsed from the block body.
+pub fn parse_test_stderr(stderr: &str) -> (Vec<TestResult>, TestSummary) {
+    // Find the summary line; if absent (e.g. compilation failed before tests ran), bail early.
+    let summary_line = match stderr
+        .lines()
+        .find(|l| l.starts_with("test result:"))
+    {
+        Some(l) => l,
+        None => return (vec![], TestSummary { passed: 0, failed: 0, ignored: 0 }),
+    };
+
+    let summary = parse_summary_line(summary_line);
+
+    if summary.failed == 0 {
+        return (vec![], summary);
+    }
+
+    // The failures detail block sits between the first `failures:` line and the second one
+    // (which lists test names only). We split on `failures:\n` and take the middle chunk.
+    let results = parse_failure_blocks(stderr);
+    (results, summary)
+}
+
+fn parse_summary_line(line: &str) -> TestSummary {
+    // Format: `test result: ok/FAILED. N passed; N failed; N ignored; ...`
+    // Segments separated by `;` are like "test result: ok. 3 passed", "2 failed", "0 ignored".
+    // Use rsplit on each segment to grab the number just before the trailing keyword.
+    let mut passed = 0;
+    let mut failed = 0;
+    let mut ignored = 0;
+    for segment in line.split(';') {
+        let s = segment.trim();
+        if let Some(rest) = s.strip_suffix(" passed") {
+            if let Ok(n) = rest.rsplit(' ').next().unwrap_or("").parse() {
+                passed = n;
+            }
+        } else if let Some(rest) = s.strip_suffix(" failed") {
+            if let Ok(n) = rest.rsplit(' ').next().unwrap_or("").parse() {
+                failed = n;
+            }
+        } else if let Some(rest) = s.strip_suffix(" ignored") {
+            if let Ok(n) = rest.rsplit(' ').next().unwrap_or("").parse() {
+                ignored = n;
+            }
+        }
+    }
+    TestSummary { passed, failed, ignored }
+}
+
+fn parse_failure_blocks(stderr: &str) -> Vec<TestResult> {
+    // Locate the first `failures:` section header.
+    let failures_marker = "failures:\n";
+    let first = match stderr.find(failures_marker) {
+        Some(i) => i + failures_marker.len(),
+        None => return vec![],
+    };
+    // The second `failures:` block (name list) begins after the detail blocks.
+    let detail_section = match stderr[first..].find(failures_marker) {
+        Some(i) => &stderr[first..first + i],
+        None => &stderr[first..],
+    };
+
+    let mut results = Vec::new();
+    let mut next_id = 1usize;
+
+    // Each failure block starts with `---- <name> stdout ----`
+    for block in detail_section.split("\n---- ") {
+        let block = block.trim_start_matches("---- ").trim_start_matches('-').trim_start();
+        // After splitting on "\n---- ", the first chunk before any `----` is just whitespace.
+        let header_end = match block.find(" stdout ----") {
+            Some(i) => i,
+            None => continue,
+        };
+        let name = block[..header_end].trim().to_owned();
+        if name.is_empty() {
+            continue;
+        }
+        let body = block[header_end + " stdout ----".len()..].trim();
+
+        // Parse panic location: `thread '...' panicked at <file>:<line>:<col>:`
+        let mut file = None;
+        let mut line = None;
+        let mut message_lines: Vec<&str> = Vec::new();
+        let mut past_panic = false;
+
+        for l in body.lines() {
+            if !past_panic {
+                if let Some(rest) = l.trim().strip_prefix("thread '") {
+                    // thread '<name>' panicked at <file>:<line>:<col>:
+                    if let Some(at_pos) = rest.find("' panicked at ") {
+                        let location = &rest[at_pos + "' panicked at ".len()..];
+                        // location may have a trailing `:` — strip it
+                        let location = location.trim_end_matches(':');
+                        // Split from the right: col, then line, then file
+                        let mut parts = location.rsplitn(3, ':');
+                        let _col = parts.next();
+                        if let Some(ln) = parts.next().and_then(|n| n.parse().ok()) {
+                            line = Some(ln);
+                        }
+                        if let Some(f) = parts.next() {
+                            file = Some(f.to_owned());
+                        }
+                        past_panic = true;
+                    }
+                }
+            } else {
+                message_lines.push(l);
+            }
+        }
+
+        let failure_message = if message_lines.is_empty() {
+            None
+        } else {
+            Some(message_lines.join("\n").trim().to_owned())
+        };
+
+        results.push(TestResult {
+            id: format!("F{}", next_id),
+            name,
+            passed: false,
+            failure_message,
+            file,
+            line,
+        });
+        next_id += 1;
+    }
+
+    results
 }
 
 #[cfg(test)]
@@ -119,5 +258,61 @@ mod tests {
     fn ignores_build_finished() {
         let lines = fixture_lines();
         assert!(parse_cargo_json_line(&lines[3], &mut 0, &mut 0).is_none());
+    }
+
+    // --- parse_test_stderr tests ---
+
+    #[test]
+    fn parse_passing_test_output() {
+        let stderr = include_str!("../tests/fixtures/test_stderr_pass.txt");
+        let (results, summary) = parse_test_stderr(stderr);
+        assert!(results.is_empty());
+        assert_eq!(summary.passed, 3);
+        assert_eq!(summary.failed, 0);
+        assert_eq!(summary.ignored, 0);
+    }
+
+    #[test]
+    fn parse_failing_test_output() {
+        let stderr = include_str!("../tests/fixtures/test_stderr_fail.txt");
+        let (results, summary) = parse_test_stderr(stderr);
+        assert_eq!(results.len(), 2);
+        assert_eq!(summary.passed, 2);
+        assert_eq!(summary.failed, 2);
+        assert_eq!(summary.ignored, 0);
+    }
+
+    #[test]
+    fn parse_empty_stderr() {
+        let (results, summary) = parse_test_stderr("");
+        assert!(results.is_empty());
+        assert_eq!(summary.passed, 0);
+        assert_eq!(summary.failed, 0);
+        assert_eq!(summary.ignored, 0);
+    }
+
+    #[test]
+    fn parse_failing_f1_details() {
+        let stderr = include_str!("../tests/fixtures/test_stderr_fail.txt");
+        let (results, _) = parse_test_stderr(stderr);
+        let f1 = &results[0];
+        assert_eq!(f1.id, "F1");
+        assert_eq!(f1.name, "tests::parse_config_missing_field");
+        assert_eq!(f1.file.as_deref(), Some("src/config.rs"));
+        assert_eq!(f1.line, Some(156));
+        assert!(f1.failure_message.as_deref().unwrap_or("").contains("left == right"));
+        assert!(!f1.passed);
+    }
+
+    #[test]
+    fn parse_failing_f2_details() {
+        let stderr = include_str!("../tests/fixtures/test_stderr_fail.txt");
+        let (results, _) = parse_test_stderr(stderr);
+        let f2 = &results[1];
+        assert_eq!(f2.id, "F2");
+        assert_eq!(f2.name, "tests::handler_timeout");
+        assert_eq!(f2.file.as_deref(), Some("src/handler.rs"));
+        assert_eq!(f2.line, Some(203));
+        assert!(!f2.passed);
     }
 }

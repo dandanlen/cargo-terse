@@ -1,0 +1,25 @@
+
+running 4 tests
+test tests::it_works ... ok
+test tests::parse_config_missing_field ... FAILED
+test tests::handler_timeout ... FAILED
+test tests::another ... ok
+
+failures:
+
+---- tests::parse_config_missing_field stdout ----
+thread 'tests::parse_config_missing_field' panicked at src/config.rs:156:5:
+assertion `left == right` failed
+  left: None
+ right: Some("default")
+
+---- tests::handler_timeout stdout ----
+thread 'tests::handler_timeout' panicked at src/handler.rs:203:5:
+assertion failed: elapsed < Duration::from_secs(5)
+
+failures:
+    tests::parse_config_missing_field
+    tests::handler_timeout
+
+test result: FAILED. 2 passed; 2 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.23s
+
