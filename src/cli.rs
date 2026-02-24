@@ -89,18 +89,46 @@ pub fn parse_args(args: Vec<OsString>) -> Result<Command, lexopt::Error> {
                         }
                         return Ok(Command::Detail { id, format });
                     }
-                    // First positional = cargo subcommand. Collect everything remaining
-                    // (including "--") as passthrough args.
+                    // First positional = cargo subcommand. Scan remaining args
+                    // for terse-specific flags; pass everything else through to cargo.
                     cargo_cmd = Some(s);
-                    cargo_args.extend(parser.raw_args()?);
+                    let remaining: Vec<OsString> = parser.raw_args()?.collect();
+                    let mut i = 0;
+                    while i < remaining.len() {
+                        let a = &remaining[i];
+                        if a == "--" {
+                            cargo_args.extend_from_slice(&remaining[i..]);
+                            break;
+                        } else if a == "--format" && i + 1 < remaining.len() {
+                            format = match remaining[i + 1].to_str() {
+                                Some("plain") => OutputFormat::Plain,
+                                Some("json") => OutputFormat::Json,
+                                Some("toon") => OutputFormat::Toon,
+                                _ => {
+                                    return Err(lexopt::Error::Custom(
+                                        "invalid --format value".into(),
+                                    ))
+                                }
+                            };
+                            i += 2;
+                        } else if a == "-v" {
+                            v_count += 1;
+                            i += 1;
+                        } else if a == "-vv" {
+                            v_count += 2;
+                            i += 1;
+                        } else if a == "--no-cache" {
+                            no_cache = true;
+                            i += 1;
+                        } else {
+                            cargo_args.push(a.clone());
+                            i += 1;
+                        }
+                    }
                 } else {
                     cargo_args.push(val);
                 }
             }
-            // `-vv` arrives as two separate Short('v') in lexopt when written as `-vv`
-            // but lexopt actually surfaces it as a single Value for stacked shorts.
-            // Handle -vv explicitly: lexopt parses `-vv` as Short('v') with a remainder
-            // "v", accessible via parser.optional_value(). We detect the second 'v' here.
             other => return Err(other.unexpected()),
         }
     }
@@ -241,5 +269,43 @@ mod tests {
     fn help_subcommand() {
         let cmd = parse_args(args(&["cargo-terse", "terse", "help"])).unwrap();
         assert!(matches!(cmd, Command::Help));
+    }
+
+    // 9. terse flags after subcommand: cargo terse check --format json
+    #[test]
+    fn terse_flags_after_subcommand() {
+        let cmd = parse_args(args(&["cargo-terse", "terse", "check", "--format", "json"])).unwrap();
+        let (cargo_cmd, format, _, _, cargo_args) = run(cmd);
+        assert_eq!(cargo_cmd, "check");
+        assert_eq!(format, OutputFormat::Json);
+        assert!(cargo_args.is_empty());
+    }
+
+    // 10. terse -v after subcommand mixed with cargo args
+    #[test]
+    fn terse_verbose_after_subcommand_with_cargo_args() {
+        let cmd = parse_args(args(&[
+            "cargo-terse",
+            "terse",
+            "test",
+            "-v",
+            "--release",
+            "--",
+            "--test-threads=1",
+        ]))
+        .unwrap();
+        let (cargo_cmd, _, verbosity, _, cargo_args) = run(cmd);
+        assert_eq!(cargo_cmd, "test");
+        assert_eq!(verbosity, Verbosity::Verbose);
+        assert_eq!(cargo_args, args(&["--release", "--", "--test-threads=1"]));
+    }
+
+    // 11. --no-cache after subcommand
+    #[test]
+    fn no_cache_after_subcommand() {
+        let cmd = parse_args(args(&["cargo-terse", "terse", "clippy", "--no-cache"])).unwrap();
+        let (cargo_cmd, _, _, no_cache, _) = run(cmd);
+        assert_eq!(cargo_cmd, "clippy");
+        assert!(no_cache);
     }
 }

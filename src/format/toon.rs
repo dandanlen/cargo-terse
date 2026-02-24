@@ -63,7 +63,7 @@ impl Formatter for ToonFormatter {
         obj.insert(
             "elapsed_secs".into(),
             serde_json::Number::from_f64(summary.elapsed_secs)
-                .unwrap()
+                .unwrap_or_else(|| serde_json::Number::from(0))
                 .into(),
         );
         toon_format::encode_default(serde_json::Value::Object(obj))
@@ -98,6 +98,22 @@ mod tests {
         assert!(out.contains("id: W1"));
         assert!(out.contains("level: warning"));
         assert!(out.contains("clippy::needless_return"));
+    }
+
+    #[test]
+    fn toon_test_failure_encodes() {
+        let r = TestResult {
+            id: "F1".into(),
+            name: "tests::parse_config".into(),
+            passed: false,
+            failure_message: Some("assertion failed".into()),
+            file: Some("src/config.rs".into()),
+            line: Some(156),
+        };
+        let out = ToonFormatter.format_test_failure(&r);
+        assert!(out.contains("id: F1"));
+        assert!(out.contains("level: fail"));
+        assert!(out.contains("tests::parse_config"));
     }
 
     #[test]

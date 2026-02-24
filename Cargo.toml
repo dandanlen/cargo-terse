@@ -2,11 +2,13 @@
 name = "cargo-terse"
 version = "0.1.0"
 edition = "2021"
+rust-version = "1.70"
 description = "Concise cargo output for AI-assisted workflows"
 license = "MIT"
 repository = "https://github.com/daabt-labs/cargo-terse"
 keywords = ["cargo", "cli", "ai", "developer-tools", "terse"]
 categories = ["development-tools::cargo-plugins", "command-line-utilities"]
+exclude = ["docs/", ".github/", ".beads/"]
 
 [dependencies]
 lexopt = "0.3"

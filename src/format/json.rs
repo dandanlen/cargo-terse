@@ -67,7 +67,7 @@ impl Formatter for JsonFormatter {
         obj.insert(
             "elapsed_secs".into(),
             serde_json::Number::from_f64(summary.elapsed_secs)
-                .unwrap()
+                .unwrap_or_else(|| serde_json::Number::from(0))
                 .into(),
         );
         serde_json::to_string(&obj).unwrap()

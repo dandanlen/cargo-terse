@@ -36,7 +36,11 @@ pub fn run_cargo(
     if fmt_check && !fmt_has_check {
         cmd.arg("--check");
     }
-    cmd.args(cargo_args);
+    if is_fmt {
+        cmd.args(cargo_args.iter().filter(|a| *a != "--fix"));
+    } else {
+        cmd.args(cargo_args);
+    }
     cmd.stdout(Stdio::piped());
     cmd.stderr(Stdio::piped());
 
@@ -97,20 +101,28 @@ pub fn run_cargo(
     };
 
     let stderr_output = stderr_handle.map(|h| h.join().unwrap()).unwrap_or_default();
-    let _ = stderr_output; // available for future use
 
     let elapsed_secs = started.elapsed().as_secs_f64();
 
     // Handle fmt output separately.
     if is_fmt {
+        if exit_code != 0 && !stderr_output.is_empty() {
+            eprint!("{}", stderr_output);
+        }
         return run_fmt_output(
             fmt_fix,
             &fmt_stdout,
             exit_code,
             elapsed_secs,
             verbosity,
+            format,
             formatter.as_ref(),
         );
+    }
+
+    // Forward cargo's stderr when it failed and we captured no diagnostics.
+    if exit_code != 0 && diagnostics.is_empty() && !stderr_output.is_empty() {
+        eprint!("{}", stderr_output);
     }
 
     let errors = diagnostics
@@ -168,13 +180,22 @@ fn run_fmt_output(
     exit_code: i32,
     elapsed_secs: f64,
     verbosity: &Verbosity,
+    format: &OutputFormat,
     formatter: &dyn format::Formatter,
 ) -> i32 {
-    let elapsed = format!("{:.1}s", elapsed_secs);
+    let make_summary = |success: bool, warnings: usize| RunSummary {
+        command: "fmt".to_string(),
+        success,
+        errors: 0,
+        warnings,
+        tests_passed: 0,
+        tests_failed: 0,
+        tests_ignored: 0,
+        elapsed_secs,
+    };
 
     if is_fix {
-        // `cargo fmt` (fix mode): just report ok.
-        println!("ok (fmt) {elapsed}");
+        println!("{}", formatter.format_summary(&make_summary(true, 0)));
         return exit_code;
     }
 
@@ -182,45 +203,51 @@ fn run_fmt_output(
     let fmt_result = fmt_mod::parse_fmt_output(stdout);
 
     if fmt_result.files.is_empty() {
-        println!("ok (fmt) {elapsed}");
+        println!("{}", formatter.format_summary(&make_summary(true, 0)));
         return exit_code;
     }
 
-    // Print a line per file, then a summary.
-    for (i, file) in fmt_result.files.iter().enumerate() {
-        let id = i + 1;
-        println!("F{id} unformatted {file}");
+    // Per-file output.
+    match format {
+        OutputFormat::Plain => {
+            for (i, file) in fmt_result.files.iter().enumerate() {
+                println!("F{} unformatted {file}", i + 1);
 
-        match verbosity {
-            Verbosity::Verbose => {
-                let diff = fmt_mod::format_file_diff(&fmt_result.full_diff, file, true);
-                if !diff.is_empty() {
+                let (show_diff, compact) = match verbosity {
+                    Verbosity::Verbose => (true, true),
+                    Verbosity::VeryVerbose => (true, false),
+                    Verbosity::Terse => (false, false),
+                };
+                if show_diff {
+                    let diff = fmt_mod::format_file_diff(&fmt_result.full_diff, file, compact);
                     for line in diff.lines() {
                         println!("   {line}");
                     }
                 }
             }
-            Verbosity::VeryVerbose => {
-                let diff = fmt_mod::format_file_diff(&fmt_result.full_diff, file, false);
-                if !diff.is_empty() {
-                    for line in diff.lines() {
-                        println!("   {line}");
-                    }
-                }
+        }
+        _ => {
+            for (i, file) in fmt_result.files.iter().enumerate() {
+                let diag = Diagnostic {
+                    id: format!("F{}", i + 1),
+                    level: DiagnosticLevel::Warning,
+                    code: Some("unformatted".to_string()),
+                    message: "needs formatting".to_string(),
+                    file: Some(file.clone()),
+                    line: None,
+                    col: None,
+                    span_text: None,
+                    span_label: None,
+                    rendered: None,
+                    raw_json: None,
+                };
+                println!("{}", formatter.format_diagnostic(&diag));
             }
-            Verbosity::Terse => {}
         }
     }
 
     let n = fmt_result.files.len();
-    println!(
-        "{n} {} formatting {elapsed}",
-        if n == 1 { "file needs" } else { "files need" }
-    );
-
-    // Suppress unused warning on formatter for fmt path (the trait object is
-    // created before we know it's fmt; in future other formatters could use it).
-    let _ = formatter;
+    println!("{}", formatter.format_summary(&make_summary(false, n)));
 
     exit_code
 }

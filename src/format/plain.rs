@@ -94,7 +94,17 @@ impl Formatter for PlainFormatter {
                     )
                 }
             }
-            "fmt" => format!("ok (fmt) 0 files changed {elapsed}"),
+            "fmt" => {
+                if summary.success {
+                    format!("ok (fmt) {elapsed}")
+                } else {
+                    let w = summary.warnings;
+                    format!(
+                        "{w} {} formatting {elapsed}",
+                        if w == 1 { "file needs" } else { "files need" }
+                    )
+                }
+            }
             cmd => {
                 if summary.success {
                     let w = summary.warnings;

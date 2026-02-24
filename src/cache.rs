@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use crate::diagnostic::{Diagnostic, RunResult};
+use crate::diagnostic::{Diagnostic, RunResult, TestResult};
 
 const CACHE_FILENAME: &str = ".terse-cache.json";
 
@@ -30,6 +30,17 @@ pub fn lookup_diagnostic_from(dir: &Path, id: &str) -> Option<Diagnostic> {
     let data = std::fs::read_to_string(path).ok()?;
     let result: RunResult = serde_json::from_str(&data).ok()?;
     result.diagnostics.into_iter().find(|d| d.id == id)
+}
+
+pub fn lookup_test_result(id: &str) -> Option<TestResult> {
+    lookup_test_result_from(&cache_dir(), id)
+}
+
+pub fn lookup_test_result_from(dir: &Path, id: &str) -> Option<TestResult> {
+    let path = dir.join(CACHE_FILENAME);
+    let data = std::fs::read_to_string(path).ok()?;
+    let result: RunResult = serde_json::from_str(&data).ok()?;
+    result.test_results.into_iter().find(|t| t.id == id)
 }
 
 #[cfg(test)]
@@ -123,5 +134,24 @@ mod tests {
         write_cache_to(dir.path(), &make_result());
 
         assert!(lookup_diagnostic_from(dir.path(), "E99").is_none());
+    }
+
+    #[test]
+    fn lookup_test_result_by_id() {
+        let dir = tempfile::tempdir().unwrap();
+        write_cache_to(dir.path(), &make_result());
+
+        let test = lookup_test_result_from(dir.path(), "T1").unwrap();
+        assert_eq!(test.id, "T1");
+        assert_eq!(test.name, "tests::my_test");
+        assert!(!test.passed);
+    }
+
+    #[test]
+    fn lookup_test_result_missing() {
+        let dir = tempfile::tempdir().unwrap();
+        write_cache_to(dir.path(), &make_result());
+
+        assert!(lookup_test_result_from(dir.path(), "T99").is_none());
     }
 }

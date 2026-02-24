@@ -32,7 +32,8 @@ pub fn parse_cargo_json_line(
             *next_warning_id += 1;
             format!("W{}", *next_warning_id)
         }
-        _ => return None,
+        // Note and Help are filtered out above (line 16-19).
+        DiagnosticLevel::Note | DiagnosticLevel::Help => unreachable!(),
     };
 
     Some(Diagnostic {
