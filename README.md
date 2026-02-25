@@ -2,7 +2,7 @@
 
 Concise cargo output for AI-assisted Rust development.
 
-`cargo-terse` wraps `cargo build`, `check`, `test`, `clippy`, and `fmt` with condensed output optimized for AI agent consumption. Fewer tokens, same information.
+`cargo-terse` wraps `cargo build`, `check`, `test`, and `clippy` with condensed output optimized for AI agent consumption. Fewer tokens, same information.
 
 ## Install
 
@@ -29,7 +29,6 @@ cargo install --path .
 cargo terse check           # concise check output
 cargo terse test             # test results without noise
 cargo terse clippy           # terse clippy warnings
-cargo terse fmt              # check formatting
 cargo terse                  # defaults to check
 ```
 
@@ -63,7 +62,7 @@ cargo terse detail W1      # shows full rendered diagnostic for W1
 Add to your project's `CLAUDE.md` (or equivalent AI agent instructions):
 
 ```
-Use `cargo terse` instead of `cargo` for build, check, test, clippy, and fmt commands.
+Use `cargo terse` instead of `cargo` for build, check, test, and clippy commands.
 Examples:
 - `cargo terse check` instead of `cargo check`
 - `cargo terse test` instead of `cargo test`
@@ -103,7 +102,7 @@ test result: FAILED. 2 passed; 2 failed; 0 ignored 1.2s
 `cargo check --message-format=short` has existed since 2018 and reduces diagnostic verbosity. `cargo-terse` builds beyond it:
 
 - **Stable drill-down IDs** (W1, E1, F1) let you revisit any diagnostic with `cargo terse detail <ID>` without re-running the build
-- **Unified output** across `check`, `test`, `clippy`, and `fmt` in a single consistent format
+- **Unified output** across `check`, `test`, and `clippy` in a single consistent format
 - **Multiple output formats** (plain, JSON, TOON) suited to different consumers
 - Pairs well with [RTK](https://github.com/daabt-labs/rtk) for additional token savings on broader cargo output
 

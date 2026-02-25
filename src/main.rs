@@ -1,7 +1,6 @@
 mod cache;
 mod cli;
 mod diagnostic;
-mod fmt;
 mod format;
 mod parser;
 mod runner;
@@ -18,7 +17,6 @@ COMMANDS:
     build       Run cargo build
     test        Run cargo test
     clippy      Run cargo clippy
-    fmt         Run cargo fmt --check
     detail <ID> Show full diagnostic for cached ID
 
 OPTIONS:
