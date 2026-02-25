@@ -98,9 +98,18 @@ F2 FAILED tests::handler_timeout
 test result: FAILED. 2 passed; 2 failed; 0 ignored 1.2s
 ```
 
+## Why not --message-format=short?
+
+`cargo check --message-format=short` has existed since 2018 and reduces diagnostic verbosity. `cargo-terse` builds beyond it:
+
+- **Stable drill-down IDs** (W1, E1, F1) let you revisit any diagnostic with `cargo terse detail <ID>` without re-running the build
+- **Unified output** across `check`, `test`, `clippy`, and `fmt` in a single consistent format
+- **Multiple output formats** (plain, JSON, TOON) suited to different consumers
+- Pairs well with [RTK](https://github.com/daabt-labs/rtk) for additional token savings on broader cargo output
+
 ## How it works
 
-`cargo-terse` spawns cargo with `--message-format=json`, parses the JSON stream in real-time, and re-renders diagnostics in a condensed format. Test results are parsed from stdout text output. A cache file (`target/.terse-cache.json`) enables the `detail` drill-down command.
+`cargo-terse` spawns cargo with `--message-format=json` (rather than the simpler `--message-format=short`), parses the JSON stream in real-time, and re-renders diagnostics in a condensed format. The JSON stream provides enough detail to assign stable IDs and support drill-down. Test results are parsed from stdout text output. A cache file (`target/.terse-cache.json`) enables the `detail` drill-down command.
 
 ## Flags
 

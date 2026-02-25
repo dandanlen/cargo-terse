@@ -62,7 +62,10 @@ fn diff_for_file<'a>(full_diff: &'a str, file: &str) -> &'a str {
 
     let mut pos = 0usize;
     for line in full_diff.lines() {
-        let next_pos = pos + line.len() + 1; // +1 for '\n'
+        let next_pos = full_diff[pos..]
+            .find('\n')
+            .map(|i| pos + i + 1)
+            .unwrap_or(full_diff.len());
         if start.is_none() {
             if line.starts_with(&file_prefix) {
                 // hunk body starts after this header line
