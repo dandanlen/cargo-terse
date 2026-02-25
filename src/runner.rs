@@ -52,6 +52,10 @@ pub fn run_cargo(
         }
     };
 
+    if std::io::IsTerminal::is_terminal(&std::io::stderr()) {
+        eprint!("\x1b[2Kcargo {cargo_cmd}...\r");
+    }
+
     // Collect stderr in a background thread to avoid deadlock when the pipe buffer fills.
     let stderr_handle = child.stderr.take().map(|stderr| {
         std::thread::spawn(move || {
