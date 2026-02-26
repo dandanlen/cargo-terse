@@ -18,7 +18,7 @@ cargo binstall cargo-terse
 
 ### From source
 ```bash
-git clone https://github.com/daabt-labs/cargo-terse.git
+git clone https://github.com/dandanlen/cargo-terse.git
 cd cargo-terse
 cargo install --path .
 ```
@@ -114,7 +114,7 @@ test result: FAILED. 2 passed; 2 failed; 0 ignored 1.2s
 - **Stable drill-down IDs** (W1, E1, F1) let you revisit any diagnostic with `cargo terse detail <ID>` without re-running the build
 - **Unified output** across `check`, `test`, and `clippy` in a single consistent format
 - **Multiple output formats** (plain, JSON, TOON) suited to different consumers
-- Pairs well with [RTK](https://github.com/daabt-labs/rtk) for additional token savings on broader cargo output
+- Pairs well with [RTK](https://github.com/dandanlen/rtk) for additional token savings on broader cargo output
 
 ## How it works
 

@@ -50,6 +50,13 @@ jobs:
           name: cargo-terse-${{ matrix.target }}
           path: cargo-terse-${{ matrix.target }}.*
 
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo publish --token ${{ secrets.CRATES_IO_TOKEN }}
+
   release:
     needs: build
     runs-on: ubuntu-latest

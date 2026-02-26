@@ -5,10 +5,19 @@ edition = "2021"
 rust-version = "1.70"
 description = "Concise cargo output for AI-assisted workflows"
 license = "MIT"
-repository = "https://github.com/daabt-labs/cargo-terse"
+readme = "README.md"
+repository = "https://github.com/dandanlen/cargo-terse"
 keywords = ["cargo", "cli", "ai", "developer-tools", "terse"]
 categories = ["development-tools::cargo-plugins", "command-line-utilities"]
 exclude = ["docs/", ".github/", ".beads/"]
+
+[package.metadata.binstall]
+pkg-url = "{ repo }/releases/download/v{ version }/{ name }-{ target }.{ archive-format }"
+bin-dir = "{ bin }{ binary-ext }"
+pkg-fmt = "tgz"
+
+[package.metadata.binstall.overrides.x86_64-pc-windows-msvc]
+pkg-fmt = "zip"
 
 [dependencies]
 lexopt = "0.3"
