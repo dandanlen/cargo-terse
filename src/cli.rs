@@ -28,6 +28,10 @@ pub enum Command {
         format: OutputFormat,
     },
     Help,
+    Setup {
+        global: bool,
+        agent: Option<String>,
+    },
 }
 
 pub fn parse_args(args: Vec<OsString>) -> Result<Command, lexopt::Error> {
@@ -65,6 +69,21 @@ pub fn parse_args(args: Vec<OsString>) -> Result<Command, lexopt::Error> {
                 if cargo_cmd.is_none() {
                     if s == "help" {
                         return Ok(Command::Help);
+                    }
+                    if s == "setup" {
+                        let mut global = false;
+                        let mut agent: Option<String> = None;
+                        while let Some(a) = parser.next()? {
+                            match a {
+                                lexopt::Arg::Long("global") => global = true,
+                                lexopt::Arg::Long("agent") => {
+                                    agent =
+                                        Some(parser.value()?.to_str().unwrap_or("").to_string());
+                                }
+                                other => return Err(other.unexpected()),
+                            }
+                        }
+                        return Ok(Command::Setup { global, agent });
                     }
                     if s == "detail" {
                         // detail <ID> [--format plain|json]
@@ -307,5 +326,51 @@ mod tests {
         let (cargo_cmd, _, _, no_cache, _) = run(cmd);
         assert_eq!(cargo_cmd, "clippy");
         assert!(no_cache);
+    }
+
+    // 12. setup subcommand
+    #[test]
+    fn setup_subcommand() {
+        let cmd = parse_args(args(&["cargo-terse", "terse", "setup"])).unwrap();
+        match cmd {
+            Command::Setup { global, agent } => {
+                assert!(!global);
+                assert!(agent.is_none());
+            }
+            _ => panic!("expected Setup command"),
+        }
+    }
+
+    // 13. setup --global
+    #[test]
+    fn setup_global() {
+        let cmd = parse_args(args(&["cargo-terse", "terse", "setup", "--global"])).unwrap();
+        match cmd {
+            Command::Setup { global, agent } => {
+                assert!(global);
+                assert!(agent.is_none());
+            }
+            _ => panic!("expected Setup command"),
+        }
+    }
+
+    // 14. setup --agent cursor
+    #[test]
+    fn setup_agent_flag() {
+        let cmd = parse_args(args(&[
+            "cargo-terse",
+            "terse",
+            "setup",
+            "--agent",
+            "cursor",
+        ]))
+        .unwrap();
+        match cmd {
+            Command::Setup { global, agent } => {
+                assert!(!global);
+                assert_eq!(agent.as_deref(), Some("cursor"));
+            }
+            _ => panic!("expected Setup command"),
+        }
     }
 }

@@ -4,6 +4,7 @@ mod diagnostic;
 mod format;
 mod parser;
 mod runner;
+mod setup;
 
 fn print_help() {
     println!(
@@ -18,6 +19,7 @@ COMMANDS:
     test        Run cargo test
     clippy      Run cargo clippy
     detail <ID> Show full diagnostic for cached ID
+    setup       Configure AI agent instruction files
 
 OPTIONS:
     --format <plain|json|toon>  Output format (default: plain)
@@ -71,6 +73,10 @@ fn main() {
                 }
             }
             cli::Command::Help => print_help(),
+            cli::Command::Setup { global, agent } => {
+                let dir = std::env::current_dir().unwrap_or_default();
+                std::process::exit(setup::run(&dir, global, agent.as_deref()));
+            }
         },
         Err(e) => {
             eprintln!("cargo-terse: {e}");

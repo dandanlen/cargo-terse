@@ -32,6 +32,16 @@ cargo terse clippy           # terse clippy warnings
 cargo terse                  # defaults to check
 ```
 
+### Setup
+
+```bash
+cargo terse setup                  # auto-detect and configure agent instruction files
+cargo terse setup --global         # configure ~/.claude/CLAUDE.md
+cargo terse setup --agent cursor   # configure .cursorrules specifically
+```
+
+Auto-detects existing agent config files (CLAUDE.md, AGENTS.md, .cursorrules, .github/copilot-instructions.md) and appends usage instructions. Idempotent — won't duplicate if already configured.
+
 ### Output formats
 
 ```bash
