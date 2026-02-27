@@ -23,6 +23,13 @@ pub enum Command {
         no_cache: bool,
         cargo_args: Vec<OsString>,
     },
+    Watch {
+        cargo_cmd: String,
+        format: OutputFormat,
+        verbosity: Verbosity,
+        no_cache: bool,
+        cargo_args: Vec<OsString>,
+    },
     Detail {
         id: String,
         format: OutputFormat,
@@ -84,6 +91,67 @@ pub fn parse_args(args: Vec<OsString>) -> Result<Command, lexopt::Error> {
                             }
                         }
                         return Ok(Command::Setup { global, agent });
+                    }
+                    if s == "watch" {
+                        let remaining: Vec<OsString> = parser.raw_args()?.collect();
+                        let mut watch_cargo_cmd = "check".to_string();
+                        let mut watch_format = format;
+                        let mut watch_v_count = v_count;
+                        let mut watch_no_cache = no_cache;
+                        let mut watch_cargo_args: Vec<OsString> = Vec::new();
+                        let mut start = 0;
+                        // First remaining arg: if it's not a flag, treat as cargo subcommand.
+                        if let Some(first) = remaining.first() {
+                            let fs = first.to_str().unwrap_or("");
+                            if !fs.starts_with('-') {
+                                watch_cargo_cmd = fs.to_string();
+                                start = 1;
+                            }
+                        }
+                        let mut i = start;
+                        while i < remaining.len() {
+                            let a = &remaining[i];
+                            if a == "--" {
+                                watch_cargo_args.extend_from_slice(&remaining[i..]);
+                                break;
+                            } else if a == "--format" && i + 1 < remaining.len() {
+                                watch_format = match remaining[i + 1].to_str() {
+                                    Some("plain") => OutputFormat::Plain,
+                                    Some("json") => OutputFormat::Json,
+                                    Some("toon") => OutputFormat::Toon,
+                                    _ => {
+                                        return Err(lexopt::Error::Custom(
+                                            "invalid --format value".into(),
+                                        ))
+                                    }
+                                };
+                                i += 2;
+                            } else if a == "-v" {
+                                watch_v_count += 1;
+                                i += 1;
+                            } else if a == "-vv" {
+                                watch_v_count += 2;
+                                i += 1;
+                            } else if a == "--no-cache" {
+                                watch_no_cache = true;
+                                i += 1;
+                            } else {
+                                watch_cargo_args.push(a.clone());
+                                i += 1;
+                            }
+                        }
+                        let watch_verbosity = match watch_v_count {
+                            0 => Verbosity::Terse,
+                            1 => Verbosity::Verbose,
+                            _ => Verbosity::VeryVerbose,
+                        };
+                        return Ok(Command::Watch {
+                            cargo_cmd: watch_cargo_cmd,
+                            format: watch_format,
+                            verbosity: watch_verbosity,
+                            no_cache: watch_no_cache,
+                            cargo_args: watch_cargo_args,
+                        });
                     }
                     if s == "detail" {
                         // detail <ID> [--format plain|json]
@@ -354,7 +422,57 @@ mod tests {
         }
     }
 
-    // 14. setup --agent cursor
+    // Helper to unwrap a Watch command
+    fn watch(cmd: Command) -> (String, OutputFormat, Verbosity, bool, Vec<OsString>) {
+        match cmd {
+            Command::Watch { cargo_cmd, format, verbosity, no_cache, cargo_args } => {
+                (cargo_cmd, format, verbosity, no_cache, cargo_args)
+            }
+            _ => panic!("expected Watch command"),
+        }
+    }
+
+    // 15. watch → defaults to check
+    #[test]
+    fn watch_defaults_to_check() {
+        let cmd = parse_args(args(&["cargo-terse", "terse", "watch"])).unwrap();
+        let (cargo_cmd, format, verbosity, no_cache, cargo_args) = watch(cmd);
+        assert_eq!(cargo_cmd, "check");
+        assert_eq!(format, OutputFormat::Plain);
+        assert_eq!(verbosity, Verbosity::Terse);
+        assert!(!no_cache);
+        assert!(cargo_args.is_empty());
+    }
+
+    // 16. watch test → test subcommand
+    #[test]
+    fn watch_test_subcommand() {
+        let cmd = parse_args(args(&["cargo-terse", "terse", "watch", "test"])).unwrap();
+        let (cargo_cmd, _, _, _, _) = watch(cmd);
+        assert_eq!(cargo_cmd, "test");
+    }
+
+    // 17. watch clippy --format json -v → correct fields
+    #[test]
+    fn watch_clippy_json_verbose() {
+        let cmd = parse_args(args(&[
+            "cargo-terse",
+            "terse",
+            "watch",
+            "clippy",
+            "--format",
+            "json",
+            "-v",
+        ]))
+        .unwrap();
+        let (cargo_cmd, format, verbosity, _, cargo_args) = watch(cmd);
+        assert_eq!(cargo_cmd, "clippy");
+        assert_eq!(format, OutputFormat::Json);
+        assert_eq!(verbosity, Verbosity::Verbose);
+        assert!(cargo_args.is_empty());
+    }
+
+    // 18. setup --agent cursor
     #[test]
     fn setup_agent_flag() {
         let cmd = parse_args(args(&[

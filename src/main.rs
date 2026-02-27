@@ -5,6 +5,7 @@ mod format;
 mod parser;
 mod runner;
 mod setup;
+mod watch;
 
 fn print_help() {
     println!(
@@ -18,6 +19,7 @@ COMMANDS:
     build       Run cargo build
     test        Run cargo test
     clippy      Run cargo clippy
+    watch [CMD] Watch for changes and rerun (default: check)
     detail <ID> Show full diagnostic for cached ID
     setup       Configure AI agent instruction files
 
@@ -53,6 +55,21 @@ fn main() {
                 cargo_args,
             } => {
                 std::process::exit(runner::run_cargo(
+                    &cargo_cmd,
+                    &cargo_args,
+                    &format,
+                    &verbosity,
+                    no_cache,
+                ));
+            }
+            cli::Command::Watch {
+                cargo_cmd,
+                format,
+                verbosity,
+                no_cache,
+                cargo_args,
+            } => {
+                std::process::exit(watch::run_watch(
                     &cargo_cmd,
                     &cargo_args,
                     &format,
