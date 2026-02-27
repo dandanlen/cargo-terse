@@ -4,6 +4,17 @@ use crate::cli::Verbosity;
 use crate::diagnostic::{Diagnostic, DiagnosticLevel, RunSummary, TestResult};
 use crate::format::Formatter;
 
+fn compression_suffix(raw: usize, output: usize) -> String {
+    if raw == 0 || output >= raw {
+        return String::new();
+    }
+    let pct = 100 - (output * 100 / raw);
+    if pct < 10 {
+        return String::new();
+    }
+    format!(" ({pct}% smaller)")
+}
+
 pub struct PlainFormatter {
     pub verbosity: Verbosity,
 }
@@ -80,17 +91,18 @@ impl Formatter for PlainFormatter {
 
     fn format_summary(&self, summary: &RunSummary) -> String {
         let elapsed = format!("{:.1}s", summary.elapsed_secs);
+        let savings = compression_suffix(summary.raw_bytes, summary.output_bytes);
         match summary.command.as_str() {
             "test" => {
                 if summary.success {
                     format!(
-                        "ok (test) {} passed, {} failed {}",
-                        summary.tests_passed, summary.tests_failed, elapsed
+                        "ok (test) {} passed, {} failed {elapsed}{savings}",
+                        summary.tests_passed, summary.tests_failed
                     )
                 } else {
                     format!(
-                        "test result: FAILED. {} passed; {} failed; {} ignored {}",
-                        summary.tests_passed, summary.tests_failed, summary.tests_ignored, elapsed
+                        "test result: FAILED. {} passed; {} failed; {} ignored {elapsed}{savings}",
+                        summary.tests_passed, summary.tests_failed, summary.tests_ignored
                     )
                 }
             }
@@ -98,13 +110,13 @@ impl Formatter for PlainFormatter {
                 if summary.success {
                     let w = summary.warnings;
                     format!(
-                        "ok ({cmd}) {} {} {elapsed}",
+                        "ok ({cmd}) {} {} {elapsed}{savings}",
                         w,
                         if w == 1 { "warning" } else { "warnings" }
                     )
                 } else {
                     format!(
-                        "{} {}, {} {} {elapsed}",
+                        "{} {}, {} {} {elapsed}{savings}",
                         summary.warnings,
                         if summary.warnings == 1 {
                             "warning"
@@ -160,6 +172,8 @@ mod tests {
             tests_failed: 0,
             tests_ignored: 0,
             elapsed_secs: elapsed,
+            raw_bytes: 0,
+            output_bytes: 0,
         }
     }
 
@@ -170,14 +184,14 @@ mod tests {
             verbosity: Verbosity::Terse,
         };
         let d = diag(
-            "W1",
+            "W-98bf",
             DiagnosticLevel::Warning,
             Some("clippy::needless_return"),
             "unnecessary `return`",
         );
         assert_eq!(
             fmt.format_diagnostic(&d),
-            "W1 warning[clippy::needless_return] src/main.rs:42:5 unnecessary `return`"
+            "W-98bf warning[clippy::needless_return] src/main.rs:42:5 unnecessary `return`"
         );
     }
 
@@ -187,10 +201,10 @@ mod tests {
         let fmt = PlainFormatter {
             verbosity: Verbosity::Terse,
         };
-        let d = diag("W1", DiagnosticLevel::Warning, None, "unused variable");
+        let d = diag("W-98bf", DiagnosticLevel::Warning, None, "unused variable");
         assert_eq!(
             fmt.format_diagnostic(&d),
-            "W1 warning src/main.rs:42:5 unused variable"
+            "W-98bf warning src/main.rs:42:5 unused variable"
         );
     }
 
@@ -201,7 +215,7 @@ mod tests {
             verbosity: Verbosity::Verbose,
         };
         let mut d = diag(
-            "W1",
+            "W-98bf",
             DiagnosticLevel::Warning,
             Some("clippy::needless_return"),
             "unnecessary `return`",
@@ -211,7 +225,7 @@ mod tests {
         let out = fmt.format_diagnostic(&d);
         assert_eq!(
             out,
-            "W1 warning[clippy::needless_return] src/main.rs:42:5 unnecessary `return`\n   |     return Ok(value);\n   |     ^^^^^^^^^^^^^^^^^ help: remove `return`: `Ok(value)`"
+            "W-98bf warning[clippy::needless_return] src/main.rs:42:5 unnecessary `return`\n   |     return Ok(value);\n   |     ^^^^^^^^^^^^^^^^^ help: remove `return`: `Ok(value)`"
         );
     }
 
@@ -222,7 +236,7 @@ mod tests {
             verbosity: Verbosity::VeryVerbose,
         };
         let mut d = diag(
-            "W1",
+            "W-98bf",
             DiagnosticLevel::Warning,
             Some("clippy::needless_return"),
             "unnecessary `return`",
@@ -266,25 +280,30 @@ mod tests {
             tests_failed: 0,
             tests_ignored: 0,
             elapsed_secs: 8.1,
+            raw_bytes: 0,
+            output_bytes: 0,
         };
         assert_eq!(fmt.format_summary(&s), "ok (test) 47 passed, 0 failed 8.1s");
     }
 
-    // 8. Test failure terse → "F1 FAILED tests::parse_config"
+    // 8. Test failure terse → "F-xxxx FAILED tests::parse_config"
     #[test]
     fn test_failure_terse() {
         let fmt = PlainFormatter {
             verbosity: Verbosity::Terse,
         };
         let r = TestResult {
-            id: "F1".to_string(),
+            id: "F-c382".to_string(),
             name: "tests::parse_config".to_string(),
             passed: false,
             failure_message: None,
             file: None,
             line: None,
         };
-        assert_eq!(fmt.format_test_failure(&r), "F1 FAILED tests::parse_config");
+        assert_eq!(
+            fmt.format_test_failure(&r),
+            "F-c382 FAILED tests::parse_config"
+        );
     }
 
     // 9. Test failure verbose → includes failure message and location
@@ -294,7 +313,7 @@ mod tests {
             verbosity: Verbosity::Verbose,
         };
         let r = TestResult {
-            id: "F1".to_string(),
+            id: "F-c382".to_string(),
             name: "tests::parse_config".to_string(),
             passed: false,
             failure_message: Some(
@@ -306,7 +325,7 @@ mod tests {
         };
         assert_eq!(
             fmt.format_test_failure(&r),
-            "F1 FAILED tests::parse_config\n   assertion `left == right` failed\n     left: None\n    right: Some(\"default\")\n   at src/config.rs:156"
+            "F-c382 FAILED tests::parse_config\n   assertion `left == right` failed\n     left: None\n    right: Some(\"default\")\n   at src/config.rs:156"
         );
     }
 }

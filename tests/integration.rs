@@ -19,10 +19,15 @@ fn check_outputs_terse_warning() {
         .output()
         .unwrap();
     let stdout = String::from_utf8(output.stdout).unwrap();
-    // Should contain a terse warning line with W1
+    // Should contain a terse warning line with hash-format ID (e.g. "W-98bf warning")
     assert!(
-        stdout.contains("W1 warning"),
-        "expected W1 warning in: {stdout}"
+        stdout.lines().any(|l| {
+            let mut parts = l.splitn(2, ' ');
+            let id = parts.next().unwrap_or("");
+            let rest = parts.next().unwrap_or("");
+            id.starts_with("W-") && rest.starts_with("warning")
+        }),
+        "expected W-<hash> warning in: {stdout}"
     );
     // Should contain "unused" somewhere
     assert!(stdout.contains("unused"), "expected 'unused' in: {stdout}");
@@ -99,21 +104,35 @@ fn exit_code_mirrors_cargo() {
 
 #[test]
 fn detail_command_works_after_run() {
-    // First run check to populate cache; cwd must match for detail to find it.
-    cargo_terse()
-        .arg("check")
+    // Run check with JSON format to get the actual hash-based ID from output.
+    let run_output = cargo_terse()
+        .args(["--format", "json", "check"])
         .current_dir(FIXTURE)
         .output()
         .unwrap();
+    let run_stdout = String::from_utf8(run_output.stdout).unwrap();
+
+    // Extract the first diagnostic ID (W-xxxx) from JSON output.
+    let id = run_stdout
+        .lines()
+        .filter_map(|line| serde_json::from_str::<serde_json::Value>(line).ok())
+        .find(|v| v.get("id").is_some() && v.get("summary").is_none())
+        .and_then(|v| v["id"].as_str().map(str::to_owned))
+        .expect("expected at least one diagnostic with an id");
+
+    assert!(
+        id.starts_with("W-"),
+        "expected W-<hash> id, got: {id}"
+    );
 
     // detail also runs with the same cwd so cache_dir() resolves to the same target/.
     let output = cargo_terse()
-        .args(["detail", "W1"])
+        .args(["detail", &id])
         .current_dir(FIXTURE)
         .output()
         .unwrap();
     let stdout = String::from_utf8(output.stdout).unwrap();
-    assert!(!stdout.is_empty(), "detail W1 should produce output");
+    assert!(!stdout.is_empty(), "detail {id} should produce output");
     assert!(
         stdout.contains("unused") || stdout.contains("extra"),
         "detail should contain the diagnostic: {stdout}"

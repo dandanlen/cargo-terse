@@ -1,10 +1,36 @@
+use std::collections::HashSet;
+use std::collections::hash_map::DefaultHasher;
+use std::hash::{Hash, Hasher};
+
 use crate::diagnostic::{Diagnostic, DiagnosticLevel, TestResult};
 
-pub fn parse_cargo_json_line(
-    line: &str,
-    next_warning_id: &mut usize,
-    next_error_id: &mut usize,
-) -> Option<Diagnostic> {
+/// Generates a stable content-hash ID with the given prefix character.
+///
+/// Uses file + error code + message as hash inputs so IDs are robust to line number
+/// changes from edits. Starts at 4 hex digits and extends on collision.
+fn unique_id(
+    prefix: char,
+    file: Option<&str>,
+    code: Option<&str>,
+    message: &str,
+    used: &mut HashSet<String>,
+) -> String {
+    let mut hasher = DefaultHasher::new();
+    file.unwrap_or("").hash(&mut hasher);
+    code.unwrap_or("").hash(&mut hasher);
+    message.hash(&mut hasher);
+    let h = hasher.finish();
+    for width in 4..=16 {
+        let mask = (1u64 << (width * 4)) - 1;
+        let id = format!("{}-{:0width$x}", prefix, h & mask, width = width);
+        if used.insert(id.clone()) {
+            return id;
+        }
+    }
+    format!("{}-{:016x}", prefix, h) // fallback: full hash
+}
+
+pub fn parse_cargo_json_line(line: &str, used_ids: &mut HashSet<String>) -> Option<Diagnostic> {
     if !line.starts_with('{') {
         return None;
     }
@@ -23,25 +49,23 @@ pub fn parse_cargo_json_line(
         .iter()
         .find(|s| s["is_primary"] == true)?;
 
-    let id = match level {
-        DiagnosticLevel::Error => {
-            *next_error_id += 1;
-            format!("E{}", *next_error_id)
-        }
-        DiagnosticLevel::Warning => {
-            *next_warning_id += 1;
-            format!("W{}", *next_warning_id)
-        }
-        // Note and Help are filtered out above (line 16-19).
+    let prefix = match level {
+        DiagnosticLevel::Error => 'E',
+        DiagnosticLevel::Warning => 'W',
+        // Note and Help are filtered out above (line 43-46).
         DiagnosticLevel::Note | DiagnosticLevel::Help => unreachable!(),
     };
+    let file = primary["file_name"].as_str();
+    let code = msg["code"]["code"].as_str();
+    let message = msg["message"].as_str()?;
+    let id = unique_id(prefix, file, code, message, used_ids);
 
     Some(Diagnostic {
         id,
         level,
-        code: msg["code"]["code"].as_str().map(str::to_owned),
-        message: msg["message"].as_str()?.to_owned(),
-        file: primary["file_name"].as_str().map(str::to_owned),
+        code: code.map(str::to_owned),
+        message: message.to_owned(),
+        file: file.map(str::to_owned),
         line: primary["line_start"].as_u64().map(|n| n as usize),
         col: primary["column_start"].as_u64().map(|n| n as usize),
         span_text: primary["text"][0]["text"].as_str().map(str::to_owned),
@@ -133,7 +157,7 @@ fn parse_failure_blocks(stderr: &str) -> Vec<TestResult> {
     };
 
     let mut results = Vec::new();
-    let mut next_id = 1usize;
+    let mut used_ids: HashSet<String> = HashSet::new();
 
     // Each failure block starts with `---- <name> stdout ----`
     for block in detail_section.split("\n---- ") {
@@ -189,15 +213,15 @@ fn parse_failure_blocks(stderr: &str) -> Vec<TestResult> {
             Some(message_lines.join("\n").trim().to_owned())
         };
 
+        let id = unique_id('F', None, None, &name, &mut used_ids);
         results.push(TestResult {
-            id: format!("F{}", next_id),
+            id,
             name,
             passed: false,
             failure_message,
             file,
             line,
         });
-        next_id += 1;
     }
 
     results
@@ -217,14 +241,19 @@ mod tests {
     #[test]
     fn ignores_compiler_artifact() {
         let lines = fixture_lines();
-        assert!(parse_cargo_json_line(&lines[0], &mut 0, &mut 0).is_none());
+        assert!(parse_cargo_json_line(&lines[0], &mut HashSet::new()).is_none());
     }
 
     #[test]
     fn parses_warning() {
         let lines = fixture_lines();
-        let d = parse_cargo_json_line(&lines[1], &mut 0, &mut 0).expect("expected Some");
-        assert_eq!(d.id, "W1");
+        let d = parse_cargo_json_line(&lines[1], &mut HashSet::new()).expect("expected Some");
+        assert!(d.id.starts_with("W-"), "expected W- prefix, got: {}", d.id);
+        assert!(
+            d.id.len() >= 6,
+            "expected at least 4 hex chars after prefix, got: {}",
+            d.id
+        );
         assert_eq!(d.level, DiagnosticLevel::Warning);
         assert_eq!(d.code.as_deref(), Some("clippy::needless_return"));
         assert_eq!(d.file.as_deref(), Some("src/lib.rs"));
@@ -237,8 +266,13 @@ mod tests {
     #[test]
     fn parses_error() {
         let lines = fixture_lines();
-        let d = parse_cargo_json_line(&lines[2], &mut 0, &mut 0).expect("expected Some");
-        assert_eq!(d.id, "E1");
+        let d = parse_cargo_json_line(&lines[2], &mut HashSet::new()).expect("expected Some");
+        assert!(d.id.starts_with("E-"), "expected E- prefix, got: {}", d.id);
+        assert!(
+            d.id.len() >= 6,
+            "expected at least 4 hex chars after prefix, got: {}",
+            d.id
+        );
         assert_eq!(d.level, DiagnosticLevel::Error);
         assert_eq!(d.code.as_deref(), Some("E0308"));
         assert_eq!(d.file.as_deref(), Some("src/handler.rs"));
@@ -247,31 +281,40 @@ mod tests {
     }
 
     #[test]
-    fn increments_ids() {
+    fn ids_are_stable_across_calls() {
+        // Same diagnostic content must always produce the same ID — the whole point of hashing.
         let lines = fixture_lines();
-        let mut wid = 0usize;
-        let mut eid = 0usize;
-        let w = parse_cargo_json_line(&lines[1], &mut wid, &mut eid).expect("expected Some");
-        assert_eq!(w.id, "W1");
-        assert_eq!(wid, 1);
-        assert_eq!(eid, 0);
-        let e = parse_cargo_json_line(&lines[2], &mut wid, &mut eid).expect("expected Some");
-        assert_eq!(e.id, "E1");
-        assert_eq!(wid, 1);
-        assert_eq!(eid, 1);
+        let d1 = parse_cargo_json_line(&lines[1], &mut HashSet::new()).expect("expected Some");
+        let d2 = parse_cargo_json_line(&lines[1], &mut HashSet::new()).expect("expected Some");
+        assert_eq!(d1.id, d2.id, "same input must produce same ID");
+
+        let e1 = parse_cargo_json_line(&lines[2], &mut HashSet::new()).expect("expected Some");
+        let e2 = parse_cargo_json_line(&lines[2], &mut HashSet::new()).expect("expected Some");
+        assert_eq!(e1.id, e2.id, "same input must produce same ID");
+    }
+
+    #[test]
+    fn warning_and_error_have_distinct_ids() {
+        let lines = fixture_lines();
+        let mut used = HashSet::new();
+        let w = parse_cargo_json_line(&lines[1], &mut used).expect("expected Some");
+        let e = parse_cargo_json_line(&lines[2], &mut used).expect("expected Some");
+        assert_ne!(w.id, e.id);
+        assert!(w.id.starts_with("W-"));
+        assert!(e.id.starts_with("E-"));
     }
 
     #[test]
     fn ignores_non_json() {
-        assert!(parse_cargo_json_line("Compiling foo v0.1.0", &mut 0, &mut 0).is_none());
-        assert!(parse_cargo_json_line("", &mut 0, &mut 0).is_none());
-        assert!(parse_cargo_json_line("not json at all", &mut 0, &mut 0).is_none());
+        assert!(parse_cargo_json_line("Compiling foo v0.1.0", &mut HashSet::new()).is_none());
+        assert!(parse_cargo_json_line("", &mut HashSet::new()).is_none());
+        assert!(parse_cargo_json_line("not json at all", &mut HashSet::new()).is_none());
     }
 
     #[test]
     fn ignores_build_finished() {
         let lines = fixture_lines();
-        assert!(parse_cargo_json_line(&lines[3], &mut 0, &mut 0).is_none());
+        assert!(parse_cargo_json_line(&lines[3], &mut HashSet::new()).is_none());
     }
 
     // --- parse_test_stderr tests ---
@@ -310,7 +353,11 @@ mod tests {
         let stderr = include_str!("../tests/fixtures/test_stderr_fail.txt");
         let (results, _) = parse_test_stderr(stderr);
         let f1 = &results[0];
-        assert_eq!(f1.id, "F1");
+        assert!(
+            f1.id.starts_with("F-"),
+            "expected F- prefix, got: {}",
+            f1.id
+        );
         assert_eq!(f1.name, "tests::parse_config_missing_field");
         assert_eq!(f1.file.as_deref(), Some("src/config.rs"));
         assert_eq!(f1.line, Some(156));
@@ -327,10 +374,34 @@ mod tests {
         let stderr = include_str!("../tests/fixtures/test_stderr_fail.txt");
         let (results, _) = parse_test_stderr(stderr);
         let f2 = &results[1];
-        assert_eq!(f2.id, "F2");
+        assert!(
+            f2.id.starts_with("F-"),
+            "expected F- prefix, got: {}",
+            f2.id
+        );
         assert_eq!(f2.name, "tests::handler_timeout");
         assert_eq!(f2.file.as_deref(), Some("src/handler.rs"));
         assert_eq!(f2.line, Some(203));
         assert!(!f2.passed);
+    }
+
+    #[test]
+    fn test_failure_ids_are_stable() {
+        // Same test name must always produce the same F- ID.
+        let stderr = include_str!("../tests/fixtures/test_stderr_fail.txt");
+        let (results1, _) = parse_test_stderr(stderr);
+        let (results2, _) = parse_test_stderr(stderr);
+        assert_eq!(results1[0].id, results2[0].id);
+        assert_eq!(results1[1].id, results2[1].id);
+    }
+
+    #[test]
+    fn test_failure_ids_differ_by_name() {
+        let stderr = include_str!("../tests/fixtures/test_stderr_fail.txt");
+        let (results, _) = parse_test_stderr(stderr);
+        assert_ne!(
+            results[0].id, results[1].id,
+            "different test names must produce different IDs"
+        );
     }
 }

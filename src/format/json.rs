@@ -70,6 +70,10 @@ impl Formatter for JsonFormatter {
                 .unwrap_or_else(|| serde_json::Number::from(0))
                 .into(),
         );
+        if summary.raw_bytes > 0 {
+            obj.insert("raw_bytes".into(), summary.raw_bytes.into());
+            obj.insert("output_bytes".into(), summary.output_bytes.into());
+        }
         serde_json::to_string(&obj).unwrap()
     }
 }
@@ -80,7 +84,7 @@ mod tests {
 
     fn sample_warning() -> Diagnostic {
         Diagnostic {
-            id: "W1".into(),
+            id: "W-98bf".into(),
             level: DiagnosticLevel::Warning,
             code: Some("clippy::needless_return".into()),
             message: "unnecessary `return`".into(),
@@ -98,7 +102,7 @@ mod tests {
     fn json_diagnostic_is_valid() {
         let out = JsonFormatter.format_diagnostic(&sample_warning());
         let v: serde_json::Value = serde_json::from_str(&out).unwrap();
-        assert_eq!(v["id"], "W1");
+        assert_eq!(v["id"], "W-98bf");
         assert_eq!(v["level"], "warning");
         assert_eq!(v["code"], "clippy::needless_return");
         assert_eq!(v["file"], "src/main.rs");
@@ -110,7 +114,7 @@ mod tests {
     #[test]
     fn json_test_failure() {
         let r = TestResult {
-            id: "F1".into(),
+            id: "F-c382".into(),
             name: "tests::parse_config".into(),
             passed: false,
             failure_message: Some("assertion failed".into()),
@@ -119,7 +123,7 @@ mod tests {
         };
         let out = JsonFormatter.format_test_failure(&r);
         let v: serde_json::Value = serde_json::from_str(&out).unwrap();
-        assert_eq!(v["id"], "F1");
+        assert_eq!(v["id"], "F-c382");
         assert_eq!(v["level"], "fail");
         assert_eq!(v["test"], "tests::parse_config");
         assert_eq!(v["file"], "src/config.rs");
@@ -137,6 +141,8 @@ mod tests {
             tests_failed: 0,
             tests_ignored: 0,
             elapsed_secs: 4.2,
+            raw_bytes: 0,
+            output_bytes: 0,
         };
         let out = JsonFormatter.format_summary(&s);
         let v: serde_json::Value = serde_json::from_str(&out).unwrap();

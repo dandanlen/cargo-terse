@@ -52,7 +52,7 @@ mod tests {
         RunResult {
             diagnostics: vec![
                 Diagnostic {
-                    id: "W1".to_string(),
+                    id: "W-a1b2".to_string(),
                     level: DiagnosticLevel::Warning,
                     code: Some("dead_code".to_string()),
                     message: "unused variable `x`".to_string(),
@@ -65,7 +65,7 @@ mod tests {
                     raw_json: None,
                 },
                 Diagnostic {
-                    id: "E1".to_string(),
+                    id: "E-c3d4".to_string(),
                     level: DiagnosticLevel::Error,
                     code: Some("E0308".to_string()),
                     message: "mismatched types".to_string(),
@@ -79,7 +79,7 @@ mod tests {
                 },
             ],
             test_results: vec![TestResult {
-                id: "T1".to_string(),
+                id: "F-e5f6".to_string(),
                 name: "tests::my_test".to_string(),
                 passed: false,
                 failure_message: Some("assertion failed".to_string()),
@@ -95,6 +95,8 @@ mod tests {
                 tests_failed: 1,
                 tests_ignored: 0,
                 elapsed_secs: 1.23,
+                raw_bytes: 0,
+                output_bytes: 0,
             },
         }
     }
@@ -109,8 +111,8 @@ mod tests {
         let loaded: RunResult = serde_json::from_str(&data).unwrap();
 
         assert_eq!(loaded.diagnostics.len(), 2);
-        assert_eq!(loaded.diagnostics[0].id, "W1");
-        assert_eq!(loaded.diagnostics[1].id, "E1");
+        assert_eq!(loaded.diagnostics[0].id, "W-a1b2");
+        assert_eq!(loaded.diagnostics[1].id, "E-c3d4");
         assert_eq!(loaded.test_results.len(), 1);
         assert_eq!(loaded.test_results[0].name, "tests::my_test");
         assert_eq!(loaded.summary.command, "check");
@@ -122,8 +124,8 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         write_cache_to(dir.path(), &make_result());
 
-        let diag = lookup_diagnostic_from(dir.path(), "W1").unwrap();
-        assert_eq!(diag.id, "W1");
+        let diag = lookup_diagnostic_from(dir.path(), "W-a1b2").unwrap();
+        assert_eq!(diag.id, "W-a1b2");
         assert_eq!(diag.message, "unused variable `x`");
         assert_eq!(diag.level, DiagnosticLevel::Warning);
     }
@@ -133,7 +135,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         write_cache_to(dir.path(), &make_result());
 
-        assert!(lookup_diagnostic_from(dir.path(), "E99").is_none());
+        assert!(lookup_diagnostic_from(dir.path(), "W-9999").is_none());
     }
 
     #[test]
@@ -141,8 +143,8 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         write_cache_to(dir.path(), &make_result());
 
-        let test = lookup_test_result_from(dir.path(), "T1").unwrap();
-        assert_eq!(test.id, "T1");
+        let test = lookup_test_result_from(dir.path(), "F-e5f6").unwrap();
+        assert_eq!(test.id, "F-e5f6");
         assert_eq!(test.name, "tests::my_test");
         assert!(!test.passed);
     }
@@ -152,6 +154,6 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         write_cache_to(dir.path(), &make_result());
 
-        assert!(lookup_test_result_from(dir.path(), "T99").is_none());
+        assert!(lookup_test_result_from(dir.path(), "F-9999").is_none());
     }
 }

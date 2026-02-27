@@ -49,10 +49,11 @@ pub fn run_cargo(
     let formatter = format::create_formatter(format, verbosity);
     let started = Instant::now();
     let mut diagnostics: Vec<Diagnostic> = Vec::new();
-    let mut next_warning_id = 0usize;
-    let mut next_error_id = 0usize;
+    let mut used_ids = std::collections::HashSet::new();
     // For test commands, non-JSON stdout lines contain test runner output.
     let mut test_stdout_lines: Vec<String> = Vec::new();
+    let mut raw_bytes: usize = 0;
+    let mut output_bytes: usize = 0;
 
     if let Some(stdout) = child.stdout.take() {
         for line in BufReader::new(stdout).lines() {
@@ -60,10 +61,11 @@ pub fn run_cargo(
                 Ok(l) => l,
                 Err(_) => break,
             };
-            if let Some(diag) =
-                parser::parse_cargo_json_line(&line, &mut next_warning_id, &mut next_error_id)
-            {
-                println!("{}", formatter.format_diagnostic(&diag));
+            raw_bytes += line.len() + 1; // +1 for newline
+            if let Some(diag) = parser::parse_cargo_json_line(&line, &mut used_ids) {
+                let formatted = formatter.format_diagnostic(&diag);
+                output_bytes += formatted.len() + 1;
+                println!("{}", formatted);
                 diagnostics.push(diag);
             } else if is_test {
                 test_stdout_lines.push(line);
@@ -103,7 +105,9 @@ pub fn run_cargo(
         let test_output = test_stdout_lines.join("\n");
         let (results, summary) = parser::parse_test_stderr(&test_output);
         for result in &results {
-            println!("{}", formatter.format_test_failure(result));
+            let formatted = formatter.format_test_failure(result);
+            output_bytes += formatted.len() + 1;
+            println!("{}", formatted);
         }
         (results, summary.passed, summary.failed, summary.ignored)
     } else {
@@ -119,9 +123,18 @@ pub fn run_cargo(
         tests_failed,
         tests_ignored,
         elapsed_secs,
+        raw_bytes,
+        output_bytes: 0, // filled in after formatting
     };
 
-    println!("{}", formatter.format_summary(&summary));
+    let summary_line = formatter.format_summary(&summary);
+    output_bytes += summary_line.len() + 1;
+    println!("{}", summary_line);
+    // Update output_bytes in the summary for the cache.
+    let summary = RunSummary {
+        output_bytes,
+        ..summary
+    };
 
     let result = RunResult {
         diagnostics,

@@ -47,6 +47,12 @@ pub struct RunSummary {
     pub tests_failed: usize,
     pub tests_ignored: usize,
     pub elapsed_secs: f64,
+    /// Raw bytes from cargo's stdout (JSON stream).
+    #[serde(default)]
+    pub raw_bytes: usize,
+    /// Bytes of terse-formatted output.
+    #[serde(default)]
+    pub output_bytes: usize,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

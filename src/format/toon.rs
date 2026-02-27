@@ -66,6 +66,10 @@ impl Formatter for ToonFormatter {
                 .unwrap_or_else(|| serde_json::Number::from(0))
                 .into(),
         );
+        if summary.raw_bytes > 0 {
+            obj.insert("raw_bytes".into(), summary.raw_bytes.into());
+            obj.insert("output_bytes".into(), summary.output_bytes.into());
+        }
         toon_format::encode_default(serde_json::Value::Object(obj))
             .unwrap_or_else(|_| "encoding error".into())
     }
@@ -77,7 +81,7 @@ mod tests {
 
     fn sample_warning() -> Diagnostic {
         Diagnostic {
-            id: "W1".into(),
+            id: "W-98bf".into(),
             level: DiagnosticLevel::Warning,
             code: Some("clippy::needless_return".into()),
             message: "unnecessary `return`".into(),
@@ -94,8 +98,8 @@ mod tests {
     #[test]
     fn toon_single_diagnostic_encodes() {
         let out = ToonFormatter.format_diagnostic(&sample_warning());
-        // Should contain key fields in TOON object format
-        assert!(out.contains("id: W1"));
+        // TOON quotes strings containing special characters like hyphens
+        assert!(out.contains("id: \"W-98bf\""));
         assert!(out.contains("level: warning"));
         assert!(out.contains("clippy::needless_return"));
     }
@@ -103,7 +107,7 @@ mod tests {
     #[test]
     fn toon_test_failure_encodes() {
         let r = TestResult {
-            id: "F1".into(),
+            id: "F-c382".into(),
             name: "tests::parse_config".into(),
             passed: false,
             failure_message: Some("assertion failed".into()),
@@ -111,7 +115,7 @@ mod tests {
             line: Some(156),
         };
         let out = ToonFormatter.format_test_failure(&r);
-        assert!(out.contains("id: F1"));
+        assert!(out.contains("id: \"F-c382\""));
         assert!(out.contains("level: fail"));
         assert!(out.contains("tests::parse_config"));
     }
@@ -127,6 +131,8 @@ mod tests {
             tests_failed: 0,
             tests_ignored: 0,
             elapsed_secs: 4.2,
+            raw_bytes: 0,
+            output_bytes: 0,
         };
         let out = ToonFormatter.format_summary(&s);
         assert!(out.contains("summary: true"));
@@ -134,3 +140,4 @@ mod tests {
         assert!(out.contains("status: fail"));
     }
 }
+
