@@ -16,7 +16,9 @@ pub struct CargoOutput {
     pub stderr_output: String,
     pub elapsed_secs: f64,
     pub raw_bytes: usize,
-    /// Count of ignored tests, sourced from the test runner summary line.
+    /// Counts from the test runner summary line (test_results only contains failures).
+    pub tests_passed: usize,
+    pub tests_failed: usize,
     pub tests_ignored: usize,
 }
 
@@ -44,6 +46,8 @@ pub fn execute_cargo(cargo_cmd: &str, cargo_args: &[OsString]) -> CargoOutput {
                 stderr_output: String::new(),
                 elapsed_secs: 0.0,
                 raw_bytes: 0,
+                tests_passed: 0,
+                tests_failed: 0,
                 tests_ignored: 0,
             };
         }
@@ -95,14 +99,14 @@ pub fn execute_cargo(cargo_cmd: &str, cargo_args: &[OsString]) -> CargoOutput {
     let stderr_output = stderr_handle.map(|h| h.join().unwrap()).unwrap_or_default();
     let elapsed_secs = started.elapsed().as_secs_f64();
 
-    let (test_results, tests_ignored) = if is_test {
+    let (test_results, tests_passed, tests_failed, tests_ignored) = if is_test {
         // Test runner output goes to stdout (interleaved with JSON). Non-JSON lines were
         // collected in test_stdout_lines. Parse them the same way we parse stderr text.
         let test_output = test_stdout_lines.join("\n");
         let (results, summary) = parser::parse_test_stderr(&test_output);
-        (results, summary.ignored)
+        (results, summary.passed, summary.failed, summary.ignored)
     } else {
-        (vec![], 0)
+        (vec![], 0, 0, 0)
     };
 
     CargoOutput {
@@ -113,6 +117,8 @@ pub fn execute_cargo(cargo_cmd: &str, cargo_args: &[OsString]) -> CargoOutput {
         stderr_output,
         elapsed_secs,
         raw_bytes,
+        tests_passed,
+        tests_failed,
         tests_ignored,
     }
 }
@@ -140,16 +146,14 @@ pub fn display_results(output: &CargoOutput, formatter: &dyn format::Formatter) 
 
     let errors = output.diagnostics.iter().filter(|d| d.level == DiagnosticLevel::Error).count();
     let warnings = output.diagnostics.iter().filter(|d| d.level == DiagnosticLevel::Warning).count();
-    let tests_passed = output.test_results.iter().filter(|r| r.passed).count();
-    let tests_failed = output.test_results.iter().filter(|r| !r.passed).count();
 
     let summary = RunSummary {
         command: output.cargo_cmd.clone(),
         success: output.exit_code == 0,
         errors,
         warnings,
-        tests_passed,
-        tests_failed,
+        tests_passed: output.tests_passed,
+        tests_failed: output.tests_failed,
         tests_ignored: output.tests_ignored,
         elapsed_secs: output.elapsed_secs,
         raw_bytes: output.raw_bytes,
