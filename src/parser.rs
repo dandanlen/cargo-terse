@@ -1,8 +1,16 @@
 use std::collections::HashSet;
-use std::collections::hash_map::DefaultHasher;
-use std::hash::{Hash, Hasher};
 
 use crate::diagnostic::{Diagnostic, DiagnosticLevel, TestResult};
+
+/// FNV-1a hash — deterministic across Rust versions (unlike DefaultHasher).
+fn fnv1a(data: &[u8]) -> u64 {
+    let mut h: u64 = 0xcbf29ce484222325;
+    for &b in data {
+        h ^= b as u64;
+        h = h.wrapping_mul(0x100000001b3);
+    }
+    h
+}
 
 /// Generates a stable content-hash ID with the given prefix character.
 ///
@@ -15,11 +23,13 @@ fn unique_id(
     message: &str,
     used: &mut HashSet<String>,
 ) -> String {
-    let mut hasher = DefaultHasher::new();
-    file.unwrap_or("").hash(&mut hasher);
-    code.unwrap_or("").hash(&mut hasher);
-    message.hash(&mut hasher);
-    let h = hasher.finish();
+    let mut bytes = Vec::new();
+    bytes.extend_from_slice(file.unwrap_or("").as_bytes());
+    bytes.push(0xff); // separator
+    bytes.extend_from_slice(code.unwrap_or("").as_bytes());
+    bytes.push(0xff);
+    bytes.extend_from_slice(message.as_bytes());
+    let h = fnv1a(&bytes);
     for width in 4..=16 {
         let mask = (1u64 << (width * 4)) - 1;
         let id = format!("{}-{:0width$x}", prefix, h & mask, width = width);
